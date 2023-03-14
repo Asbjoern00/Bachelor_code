@@ -52,6 +52,19 @@ class RiverNode:
 
 
 class RiverSwimEnvironment:
+    """
+    Riverswim environment
+    -----------
+    Parameters
+    -----------
+    gamma : float between 0 and 1
+        Discount factor
+    nodes : List of instances of RiverNodes
+        Defaults to standardriverswim
+    n_states : int
+        Number of states. Not necessary if nodes supplied explicitly. If nodes not supplied uses n_states as constructor of nodes.
+    other parameters : Rewards/transition probs for all states
+    """
     def __init__(self, gamma, nodes = None, n_states = None, reward_leftbank ={"L":0.05, "R":0}, reward_other = {"L":0, "R":0}, reward_rightbank = {"L":0, "R":1},
     trans_leftbank = {"L":np.array([0,1,0]),"R":np.array([0,0.6,0.4])}, trans_other = {"L":np.array([1,0,0]),"R":np.array([0.05,0.55,0.4])},
     trans_rightbank = {"L":np.array([1,0,0]),"R":np.array([0.4,0.6,0])}):
@@ -62,19 +75,31 @@ class RiverSwimEnvironment:
             self.nodes = [left_node] + ([RiverNode(rewards=reward_other, transition_probs=trans_other) for i in range(n_states-2)]) + [right_node] # Make a list of nodes
         self.n_states = len(self.nodes)
         self.gamma = gamma # set discount
-        self.current_state = 0 # Set initial state equal to 0 
+        self.gen_all() # Gens matrices
+        self.reset_all() # Resets all nodes
     
     def reset_all(self):
+        """
+        Resets all nodes
+        """
         for node in self.nodes:
             node.reset_node()
             self.current_state = 0 
 
-    #Method for constructing reward-vector, transition-matrix and Value-vector given a policy.
-    
-    # Policy should be of the form np.array(["L","R","L"...]) such that policy[i] = action taken in state i
-    # Mostly legacy for constructing all_L and all_R
 
     def gen_matrices(self, policy):
+        """
+        Method for generating reward, transition matrix and value vector for a given policy. 
+        Deprecated and essentially only used for generating the all-left and all-right matrices
+        ----------
+        Parameters
+        ----------
+        policy : policy on the form ['L','R','R', ...]
+        ----------
+        Returns
+        ----------
+        dict of rewards, transtion and value
+        """
         reward_vector = np.array([self.nodes[i].rewards[policy[i]] for i in range(self.n_states)]) # Generates 
 
         transitionmatrix = np.zeros((self.n_states+1, self.n_states+1)) # Initialise 0-matrix for transition probabilities. Pad edges with +1
@@ -90,44 +115,23 @@ class RiverSwimEnvironment:
     
     # Generates transition/reward of all_L and all_R policies. All other (stationary) policies can be derived from taking a combination of these
     def gen_all(self):
+        """
+        Method for generating all_L and all_R matrices. Called in __init__
+        """
         self.all_R = self.gen_matrices(np.repeat("R", self.n_states))
         self.all_L = self.gen_matrices(np.repeat("L", self.n_states))
 
+
+
     #Does the same as gen_matrices, but for stochastic policies. Should be called after gen_all()
-    def eval_stochastic_policy(self, p_go_right=np.array([0.5,0.5,0.5,0.5])):
-        reward_vector = self.all_R["reward"] * p_go_right + self.all_L["reward"]*(1-p_go_right)
-        transition_matrix = self.all_R["transition"]*p_go_right + self.all_L["transition"]*(1-p_go_right)
-        value_vector = np.linalg.inv(np.identity(self.n_states)-self.gamma*transition_matrix) @ reward_vector # Calculate value of policy
-        return {"reward":reward_vector, "transition":transition_matrix, "value":value_vector} # Output dict containing reward vektor, transition matrix and value vector
-
-    
-    def value_iteration(self,epsilon):
-        n = 0 # set n = 0
-        rmax = max([max(self.nodes[i].rewards.values()) for i in range(self.n_states)]) # Get rmax
-        V_n = np.zeros(self.n_states) # Set V_n to 0 (arbitrary)
-        V_np1  = np.ones(self.n_states)*rmax*(1/(1-self.gamma)) # Set V_1 = rmax/(1-gamma)*(1-vector)
-        
-        #Generate reward/transition-matrices
-        all_R = self.gen_matrices(np.repeat("R", self.n_states))
-        all_L = self.gen_matrices(np.repeat("L", self.n_states))
-
-        while(np.max(np.abs(V_np1-V_n))>= (1-self.gamma)/(2*self.gamma)*epsilon):
-            V_n = V_np1
-            #Compute V_{n+1}(s) = max (r(s,a) + gamma*sum(p(x|s,a)*V_{n}(x))) for each s, by doing creating transition/reward-matrices for "L", "R"-actions in each state.
-            V_np1_R = all_R["reward"] + self.gamma*all_R["transition"]@V_np1
-            V_np1_L = all_L["reward"] + self.gamma*all_L["transition"]@V_np1
-            V_np1 = np.maximum(V_np1_R,V_np1_L)
-            n=n+1
-        final_policy = np.where(V_np1_R == V_np1, "R","L") # Get final policy
-        self.n_iter_VI = n
-        self.final_policy_VI = final_policy
-        self.final_valuef_VI = V_np1
+    #def eval_stochastic_policy(self, p_go_right=np.array([0.5,0.5,0.5,0.5])):
+        #reward_vector = self.all_R["reward"] * p_go_right + self.all_L["reward"]*(1-p_go_right)
+        #transition_matrix = self.all_R["transition"]*p_go_right + self.all_L["transition"]*(1-p_go_right)
+        #value_vector = np.linalg.inv(np.identity(self.n_states)-self.gamma*transition_matrix) @ reward_vector # Calculate value of policy
+        #return {"reward":reward_vector, "transition":transition_matrix, "value":value_vector} # Output dict containing reward vektor, transition matrix and value vector
 
     def policy_iteration(self):
         n = 0
-        #pi_n =   np.random.choice(np.array(["L","R"]), self.n_states) # Initialise policies as random
-        #pi_np1 = np.random.choice(np.array(["L","R"]), self.n_states)
-        
         #Initialize PI w. speedup
         pi_n = np.repeat("R", self.n_states)
         pi_n[0] = "L"
@@ -136,16 +140,13 @@ class RiverSwimEnvironment:
         if np.all(pi_n == pi_np1):
             self.policy_iteration()
 
-        all_R = self.gen_matrices(np.repeat("R", self.n_states))
-        all_L = self.gen_matrices(np.repeat("L", self.n_states))
-
         while np.any(pi_n != pi_np1):
             pi_n = pi_np1
             V_n = self.gen_matrices(pi_n)["value"] #Find value of pi_n
             # Generate rewards for every action in each state
 
-            V_np1_R = all_R["reward"] + self.gamma*all_R["transition"]@V_n
-            V_np1_L = all_L["reward"] + self.gamma*all_L["transition"]@V_n
+            V_np1_R = self.all_R["reward"] + self.gamma*self.all_R["transition"]@V_n
+            V_np1_L = self.all_L["reward"] + self.gamma*self.all_L["transition"]@V_n
             V_np1 = np.maximum(V_np1_R,V_np1_L) # Get elementwise max
             pi_np1 = np.where(V_np1_R == V_np1, "R","L") # Get argmax
             n = n+1
@@ -154,8 +155,8 @@ class RiverSwimEnvironment:
         self.final_policy_PI = pi_np1
         self.final_valuef_PI = V_np1
         Q_star = np.empty((self.n_states,2))
-        Q_star[:,0] = all_L["reward"] + self.gamma * (all_L["transition"] @ self.final_valuef_PI)
-        Q_star[:,1] = all_R["reward"] + self.gamma * (all_R["transition"] @ self.final_valuef_PI)
+        Q_star[:,0] = self.all_L["reward"] + self.gamma * (self.all_L["transition"] @ self.final_valuef_PI)
+        Q_star[:,1] = self.all_R["reward"] + self.gamma * (self.all_R["transition"] @ self.final_valuef_PI)
         self.Q_star = Q_star
 
     def q_learning(self, alpha = "constant", incremental = False ,rounds = 10**5, p_go_right=np.array([0.5,0.5,0.5,0.5])):
@@ -214,37 +215,90 @@ class RiverSwimEnvironment:
                         B_t[i,index,action_dict[action]] += 1/self.nodes[index].times_since_last_play[action]
             index += next
         return q_t
+    
+    def vanilla_q_learning(self, exploration_policy, step_size, step_size_func,rounds):
+        """
+        Vanilla q-learning
+        ----------------
+        Parameters
+        ----------------
+        exploration_policy : instance of policy class
+            The policy to be used for the data-generating process in q-learning
+        step_size : str
+            The step-size to use for q-learning choose either adaptive or constant
+        step_size_func : function
+            function that goes from the reals to the reals. Used for calculating the stepsize
+        rounds : int
+            Number of rounds to do q-learning for
+        """
+
+        # Initialize q and reset all nodes
+        self.reset_all()
+        q_t = np.zeros((rounds, self.n_states, 2))
+
+        #Convience translator between left and right and 0/1 for referencing numpy arrays
+        action_dict = {"L":0,"R":1}
+        reverse_dict = {"0":"L","1":"R"}
+
+        # Specify learning rates
+        if step_size == "constant":
+            learning_rate = np.arange(rounds)+1
+            learning_rate = step_size_func(learning_rate)
+        else:
+            learning_rate = np.zeros(rounds)
+
+        for i in range(rounds):
+            # Updates all q-values - done here because of index convinience
+            q_t[i,:,:] = q_t[i-1,:,:]
+            #Update the adaptive stepsize
+            curr_state = self.current_state
+            
+            # execute action according to exploration policy. Note - updates self.current_state 
+            action_sample, reward = exploration_policy.execute_policy(self)
+            if step_size == "adaptive":
+                learning_rate[i]  = step_size_func(self.nodes[curr_state].actions_taken[action_sample])
+
+            delta = reward + self.gamma*np.max(q_t[i-1,self.current_state,:]) - q_t[i-1,curr_state,action_dict[action_sample]]
+
+            q_t[i,curr_state,action_dict[action_sample]] += learning_rate[i]*delta
+        return q_t
+    def option_q_learning(self, exploration_policy, step_size, step_size_func)
+
 
 class PrimitivePolicy:
-    def __init__(self, environment, actions):
+    def __init__(self, actions):
         """
         Initizialise policy on set of actions
         ----------
         Parameters
         ----------
-        environment : Object
-            instance of riwerswim class
-        
         actions : List
             List of same length as the riwerswim environment. The i'th entry of the list should be a dict of the form {"L":a,"R":1-a} for a in the 
             interval between 0 and 1. The dict specifies the actions being taken with what probability in each state
         
         """
-        self.environment = environment
         self.actions = actions 
-        if self.environment.n_states != len(self.actions):
-            raise Exception("Length of policy does not match the number of states")
         
-    def execute_policy(self):
+    def execute_policy(self,environment):
         """
         Executes policy on the current state of the environment
         ----------
         Parameters:
         ----------
+        environment : Object
+            instance of riwerswim class
+        ----------
+        Returns:
+        ----------
+        Returns the reward of the taken action and updates RiwerSwim environment.
         """
-        action_sample = np.random.choice(a = list(self.actions[self.environment.current_state].keys()) , size = 1 , p=list(self.actions[self.environment.current_state].values()))[0]# Sample actions
-        next, reward = self.environment.nodes[self.environment.current_state].visit(action_sample) # Visit next round
-        self.environment.current_state += next #
+        if len(self.actions) != environment.n_states:
+            raise Exception("Length of policy does not match the number of states")
+         
+        action_sample = np.random.choice(a = list(self.actions[environment.current_state].keys()) , size = 1 , p=list(self.actions[environment.current_state].values()))[0]# Sample actions
+        next, reward = environment.nodes[environment.current_state].visit(action_sample) # Visit next round
+        environment.current_state += next #
+        return action_sample,reward
 
 class Option:
     def __init__(self, init_set, policy, termination_probs):
@@ -264,8 +318,19 @@ class Option:
         self.policy = policy
         self.termination_probs = termination_probs
     
-    def execute_option(self):
+    def execute_option(self,environment):
+        """
+        executes option on the environment
+        ----------
+        Parameters
+        ----------
+        Environment: instance of RiverSwim class
+        ----------
+        Returns
+        ----------
+        Nothing. updates riverswim environment
+        """    
         terminated = False
         while not terminated:
-            self.policy.execute_policy()
-            terminated = np.random.binomial(1, p = self.termination_probs[self.policy.environment.current_state])
+            self.policy.execute_policy(environment) # Execute policy being followed on the environment
+            terminated = np.random.binomial(1, p = self.termination_probs[environment.current_state]) # Sample whether to terminate
