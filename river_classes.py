@@ -1,4 +1,5 @@
 import numpy as np
+        
 # index indicates where the node is in the river. index = 0 is equivalent to left bank and index = L is equivalent to right bank
 # rewards and transition_probs should be dicts of the form
 # rewards = {"L" : r_L, "R" : r_R} or L replaced w. R for indicating going right
@@ -6,8 +7,6 @@ import numpy as np
 #                      "R": np.array([p^R_{index-1}, p^R_{index}, p^R_{index+1}]}
 # Where p^A_{i} gives the transition probability from the current state to state i under action A. We can input only 3 values instead of transition matrix
 # As all other probabilities in River-Swim are zer
-
-
 class RiverNode:
     def __init__(self, rewards, transition_probs):
         #Set rewards and transition probabilities for a single node
@@ -49,18 +48,7 @@ class RiverNode:
         self.actions_taken = {"L": 0 ,"R": 0}
         self.emperical_reward = {"L":0, "R":0}
         self.emperical_transitions = {"L":{"-1":0, "0":0, "1":0}, "R":{"-1":0, "0":0, "1":0}}
-#Make a class generating the environment. Takes arguments:
-#n_states = #states in the riwerswim environment
-# The following parameters are used to construct instances of RiverNode class, and should be passed as described above
 
-#reward_leftbank = The reward for choosing left at index = 0
-#reward_rightbank = The reward for choosing right at index = n_states
-#reward_other = reward for other nodes (in-between terminal)
-
-
-#trans_rightbank = transition probabilities in the rightmost bank
-#trans_leftbank = transition probabilities in the leftmost bank
-#trans_other = transition probabilities for other nodes (in-between terminal)
 
 
 class RiverSwimEnvironment:
@@ -74,10 +62,12 @@ class RiverSwimEnvironment:
             self.nodes = [left_node] + ([RiverNode(rewards=reward_other, transition_probs=trans_other) for i in range(n_states-2)]) + [right_node] # Make a list of nodes
         self.n_states = len(self.nodes)
         self.gamma = gamma # set discount
+        self.current_state = 0 # Set initial state equal to 0 
     
     def reset_all(self):
         for node in self.nodes:
             node.reset_node()
+            self.current_state = 0 
 
     #Method for constructing reward-vector, transition-matrix and Value-vector given a policy.
     
@@ -97,6 +87,7 @@ class RiverSwimEnvironment:
         value_vector = np.linalg.inv(np.identity(self.n_states)-self.gamma*transitionmatrix) @ reward_vector # Calculate value of policy
 
         return {"reward":reward_vector, "transition":transitionmatrix, "value":value_vector} # Output dict containing reward vektor, transition matrix and value vector
+    
     # Generates transition/reward of all_L and all_R policies. All other (stationary) policies can be derived from taking a combination of these
     def gen_all(self):
         self.all_R = self.gen_matrices(np.repeat("R", self.n_states))
@@ -166,21 +157,6 @@ class RiverSwimEnvironment:
         Q_star[:,0] = all_L["reward"] + self.gamma * (all_L["transition"] @ self.final_valuef_PI)
         Q_star[:,1] = all_R["reward"] + self.gamma * (all_R["transition"] @ self.final_valuef_PI)
         self.Q_star = Q_star
-        # Simulates the MDP under a fixed policy
-        
-    def simulate_mdp(self, rounds = 10**5,  p_go_right=np.array([0.5,0.5,0.5,0.5])):
-        environemnts = []
-        self.reset_all()
-        # Init simulation in left_most state
-        for i in range(rounds):
-            if i == 0:
-                index = 0
-            action_sample = np.random.choice(["L","R"], size = 1, p = [1-p_go_right[index], p_go_right[index]])[0]
-            next,reward = self.nodes[index].visit(action_sample)
-            index += next
-            empirical_nodes = [self.nodes[j].get_estimate() for j in range(self.n_states)]
-            environemnts.append(RiverSwimEnvironment(gamma=self.gamma, nodes = empirical_nodes))
-        self.emperical_environments = environemnts
 
     def q_learning(self, alpha = "constant", incremental = False ,rounds = 10**5, p_go_right=np.array([0.5,0.5,0.5,0.5])):
         # Initialize q and reset all nodes
@@ -238,3 +214,58 @@ class RiverSwimEnvironment:
                         B_t[i,index,action_dict[action]] += 1/self.nodes[index].times_since_last_play[action]
             index += next
         return q_t
+
+class PrimitivePolicy:
+    def __init__(self, environment, actions):
+        """
+        Initizialise policy on set of actions
+        ----------
+        Parameters
+        ----------
+        environment : Object
+            instance of riwerswim class
+        
+        actions : List
+            List of same length as the riwerswim environment. The i'th entry of the list should be a dict of the form {"L":a,"R":1-a} for a in the 
+            interval between 0 and 1. The dict specifies the actions being taken with what probability in each state
+        
+        """
+        self.environment = environment
+        self.actions = actions 
+        if self.environment.n_states != len(self.actions):
+            raise Exception("Length of policy does not match the number of states")
+        
+    def execute_policy(self):
+        """
+        Executes policy on the current state of the environment
+        ----------
+        Parameters:
+        ----------
+        """
+        action_sample = np.random.choice(a = list(self.actions[self.environment.current_state].keys()) , size = 1 , p=list(self.actions[self.environment.current_state].values()))[0]# Sample actions
+        next, reward = self.environment.nodes[self.environment.current_state].visit(action_sample) # Visit next round
+        self.environment.current_state += next #
+
+class Option:
+    def __init__(self, init_set, policy, termination_probs):
+        """
+        Initializes option on the environment
+        ----------
+        Parameters
+        ----------
+        init_set : list
+            List of states where the option can be executed
+        policy : instance of PrimitivePolicy class
+            Policy to follow during execution of option
+        termination_probabilities: list
+            List containing the probabilities of the option executing in each state
+        """
+        self.init_set = init_set
+        self.policy = policy
+        self.termination_probs = termination_probs
+    
+    def execute_option(self):
+        terminated = False
+        while not terminated:
+            self.policy.execute_policy()
+            terminated = np.random.binomial(1, p = self.termination_probs[self.policy.environment.current_state])
