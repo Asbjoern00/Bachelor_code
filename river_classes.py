@@ -1,4 +1,5 @@
 import numpy as np
+import itertools
         
 # index indicates where the node is in the river. index = 0 is equivalent to left bank and index = L is equivalent to right bank
 # rewards and transition_probs should be dicts of the form
@@ -20,7 +21,11 @@ class RiverNode:
 
     # Visits node and returns transition as well as reward
     def visit(self, action):
-        # Update parameters of node 
+        # Update parameters of node
+        if action == 0:
+            action = "L"
+        if action == 1:
+            action = "R"
         self.times_visited +=  1
         self.actions_taken[action] += 1
         self.emperical_reward[action] += self.rewards[action]
@@ -77,6 +82,11 @@ class RiverSwimEnvironment:
         self.gamma = gamma # set discount
         self.gen_all() # Gens matrices
         self.reset_all() # Resets all nodes
+
+        #Convience translator between left and right and 0/1 for referencing numpy arrays
+        self.action_dict = {"L":0,"R":1}
+        self.reverse_dict = {"0":"L","1":"R"}
+        self.policy_iteration()
     
     def reset_all(self):
         """
@@ -85,6 +95,7 @@ class RiverSwimEnvironment:
         for node in self.nodes:
             node.reset_node()
             self.current_state = 0 
+
 
 
     def gen_matrices(self, policy):
@@ -262,7 +273,76 @@ class RiverSwimEnvironment:
 
             q_t[i,curr_state,action_dict[action_sample]] += learning_rate[i]*delta
         return q_t
-    def option_q_learning(self, exploration_policy, step_size, step_size_func)
+    def option_q_learning(self, exploration_policy, step_size, step_size_func):
+        pass
+
+    def ucb_qlearning(self, T= 2*10**6, epsilon = 0.13, delta = 0.05, pregen_values = True):
+        # Initialize
+        # N(s,a) = 1 for all state action pairs
+        # Q = Qhat = R_max/(1-gamma)
+        self.reset_all()
+        # Pregen values. makes code run faster if S^A is small
+        if pregen_values:
+            lst = list(map(list, itertools.product(["L", "R"], repeat=5)))
+            d = {}
+            for policy in lst:
+                    pol = tuple(policy)
+                    d[pol] = self.gen_matrices(policy)["value"]
+
+        Q_hat = np.ones((self.n_states, 2))*(1/(1-self.gamma))
+        Q = np.copy(Q_hat)
+        for node in self.nodes:
+            for action in ['L','R']:
+                node.actions_taken[action] += 1
+        rewards = np.zeros(T)
+        epsilon_bad = np.zeros(T)
+
+        #Initialize H, b, alpha 
+        H = 1/(1-self.gamma)*np.log(1/epsilon)
+        
+        def b_k(k,H=H):
+            return (1/2)*np.sqrt(H/k*np.log(self.n_states*2*np.log(k+1)/delta))
+        def alpha_k(k,H=H):
+            return (H+1)/(H+k)
+        
+        # Sample initial state
+        self.current_state = np.random.choice(self.n_states, size = 1)
+        
+        # Do main part of loop
+        for t in range(T):
+            
+            # Calculate relevant sizes for rest of calculations
+            s_t = int(self.current_state)
+            policy_t = np.argmax(Q_hat, axis=1)
+            a_t =int(policy_t[s_t])
+            
+            N_t = self.nodes[s_t].actions_taken[self.reverse_dict[str(a_t)]]
+            
+            # Gen list of actions such that value can be computed 
+            pol_list = [self.reverse_dict[str(int(policy_t[i]))] for i in range(len(policy_t))]
+            
+            if pregen_values:
+                value_t = d[tuple(pol_list)]
+            else:    
+                value_t = self.gen_matrices(pol_list)["value"]
+            
+            #Check if policy is epsilon-bad
+            epsilon_bad[t] += (value_t[s_t] < self.final_valuef_PI[s_t] - epsilon)
+
+            # Visit node
+            trans, rewards[t] = self.nodes[s_t].visit(a_t)
+            s_tp1 = s_t + trans
+
+            # Update Q
+            Q[s_t,a_t] = (1-alpha_k(N_t))*Q[s_t,a_t] + alpha_k(N_t)*(rewards[t] + b_k(N_t) + self.gamma*np.max(Q_hat[s_tp1, :]))
+
+            #Update \hat{Q}
+            Q_hat[s_t,a_t] = np.min([Q[s_t,a_t], Q_hat[s_t,a_t]])
+
+            #Update state
+            self.current_state = s_tp1
+        
+        return rewards, epsilon_bad
 
 
 class PrimitivePolicy:
