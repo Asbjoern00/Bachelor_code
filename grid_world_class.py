@@ -1,12 +1,6 @@
 # Packages:
 import numpy as np
 
-<<<<<<< HEAD
-
-=======
-##########################################################################################
-# To do: Give a parameter T_max in order to get options in. 
->>>>>>> 33e8cef9401233006167dfe8f6ab838dc8578d7b
 # Actions: '0' = 'go up', '1' = 'go right', '2'  = 'go down' thus '3' = 'go left'
 # State 0 is upper left, state nS - 1 is lower right.
 # The agent is teleported back to anay other state except for the target state 'nS - 1'
