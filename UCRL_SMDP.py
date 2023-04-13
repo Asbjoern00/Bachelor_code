@@ -14,6 +14,14 @@ class UCRL_SMDP:
         self.tau_min = tau_min
         self.tau_max = tau_max
 
+        # For speedup of EVI
+        self.current_bias_estimate = np.zeros(self.nS)
+        # Also for EVI. See Fruits code
+        self.tau = self.tau_min-0.1
+        
+        #For detecting last action
+        self.last_action = -1
+
         # The "counter" variables:
         self.Nk = np.zeros((self.nS, self.nA), dtype=int) # Number of occurences of (s, a) at the end of the last episode.
         self.Nsas = np.zeros((self.nS, self.nA, self.nS), dtype=int) # Number of occureces of (s, a, s').
@@ -55,12 +63,135 @@ class UCRL_SMDP:
 
         # Update the confidence intervals and policy.
         self.confidence()
-        self.policy = self.EVI()
+        self.policy = self.EVI() # Should add EVI!!!
 
 
 
     def confidence(self):
+        """Computes confidence intervals. See section *Confidence Intervals* in Fruit
+        """
+        for s in range(self.nS):
+            for a in range(self.nA):                                
                 
-        beta_tau = 
-        beta_p = 
-        beta_r = 
+                #Probability
+                self.confP = np.sqrt( (14 * self.nS * np.log(2*self.nA*self.i/self.delta) ) / (self.Nk[s,a]) )
+                
+                #Holding time
+                if self.Nk[s,a] >= (2*self.b_tau**2)/(self.sigma_tau**2)*np.log((240*self.nS*self.nA*self.i**7)/ (self.delta)):
+                    self.conftau[s,a] = self.sigma_tau * np.sqrt( (14 * np.log(2*self.nS*self.nA*self.i/self.delta) ) / (self.Nk[s,a]))
+                else:
+                    self.conftau[s,a] = 14 * self.b_tau *  ( np.log(2*self.nS*self.nA*self.i/self.delta) ) / (self.Nk[s,a])
+
+                #Rewards
+                if self.Nk[s,a] >= (2*self.b_r**2)/(self.sigma_r**2)*np.log((240*self.nS*self.nA*self.i**7)/ (self.delta)):
+                    self.confR[s,a] = self.sigma_r * np.sqrt( (14 * np.log(2*self.nS*self.nA*self.i/self.delta) ) / (self.Nk[s,a]))
+                else:
+                    self.confR[s,a] = 14 * self.b_r *  ( np.log(2*self.nS*self.nA*self.i/self.delta) ) / (self.Nk[s,a])
+    
+    def max_proba(self, sorted_indices, s, a):
+        """Maximizes over probability distribution in confidence set
+
+        Parameters
+        ----------
+        sorted_indices : np.array
+            sorted (smallest to largest) indices 
+        s : int
+            integer representation of state
+        a : int
+            integer representation of action
+
+        Returns
+        -------
+        max_p: np.array
+            maximizing probability distribution 
+        """
+		
+        min1 = min([1, self.hatP[s, a, sorted_indices[-1]] + (self.confP[s, a] / 2)])
+        max_p = np.zeros(self.nS)
+            
+        if min1 == 1:
+            max_p[sorted_indices[-1]] = 1
+        else:
+            max_p = np.copy(self.hatP[s, a])
+            max_p[sorted_indices[-1]] += self.confP[s, a] / 2
+            l = 0 
+            while sum(max_p) > 1:
+                max_p[sorted_indices[l]] = max([0, 1 - sum(max_p) + max_p[sorted_indices[l]]])
+                l += 1        
+        return max_p
+    
+    # The Extended Value Iteration, perform an optimisitc VI over a set of MDP.
+	#Note, changed fixed epsilon to 1/sqrt(i)
+    def EVI(self, max_iter = 2*10**3):
+        """Does EVI on extended by converting SMDP to equivalent extended MDP
+
+        Parameters
+        ----------
+        max_iter : int, optional
+            Max iteration to run EVI for, by default 2*10**3
+
+        Returns
+        -------
+        policy : np.array
+            Optimal policy w.r.t. optimistic SMDP 
+        """
+        niter = 0
+        epsilon = 1/np.sqrt(self.i)
+        sorted_indices = np.arange(self.nS)
+        action_noise = [(np.random.random_sample() * 0.1 * min((1e-6, epsilon))) for _ in range(self.nA)]
+
+        # The variable containing the optimistic policy estimate at the current iteration.
+        policy = np.zeros(self.nS, dtype=int)
+
+        # Initialise the value and epsilon as proposed in the course.
+        V0 = self.current_bias_estimate # NB: setting it to the bias obtained at the last episode can help speeding up the convergence significantly!, Done!
+        V1 = np.zeros(self.nS)
+        r_tilde = np.zeros((self.nS, self.nA))
+        tau_tilde = np.zeros((self.nS, self.nA))
+
+        # The main loop of the Value Iteration algorithm.
+        while True:
+            niter += 1
+            for s in range(self.nS):
+                for a in range(self.nA):
+                    maxp = self.max_proba(sorted_indices, s, a)
+                    r_tilde[s,a] = min(self.hatR[s,a] + self.confR[s,a], self.r_max*self.tau_max)
+                    tau_tilde[s,a] = min(self.tau_max, max(self.tau_min, self.hattau - np.sign(r_tilde[s,a]+  self.tau*(maxp.T @ V0-V0[s])*self.conftau[s,a])))
+                    
+                    temp = r_tilde[s,a]/tau_tilde[s,a]+(self.tau/tau_tilde[s,a])*(maxp.T@V0 - V0[s])-V0[s]
+                    if (a == 0) or ((temp + action_noise[a]) > (V1[s] + action_noise[self.policy[s]])): # Using a noise to randomize the choice when equals.
+                        V1[s] = temp
+                        policy[s] = a
+
+            # Testing the stopping criterion (+1 abitrary stop when 'max_iter' is reached).
+            diff  = [abs(x - y) for (x, y) in zip(V1, V0)]
+            if (max(diff) - min(diff)) < epsilon:
+                self.current_bias_estimate = V1
+                return policy
+            else:
+                V0 = V1
+                V1 = np.zeros(self.nS)
+                sorted_indices = np.argsort(V0)
+            if niter > max_iter:
+                print("No convergence in EVI after: ", max_iter, " steps!", maxp)
+                return policy
+    
+    def play(self,state, reward):
+
+        if self.last_action >= 0: # Update if not first action.
+            self.Nsas[self.s, self.last_action, state] += 1
+            self.Rsa[self.s, self.last_action] += reward
+
+        action = self.policy[state]
+        if self.vk[state, action] > max([1, self.Nk[state, action]]): # Stoppping criterion
+            self.new_episode()
+            action  = self.policy[state]
+
+        # Update the variables:
+        self.vk[state, action] += 1
+        self.obtained_rewards[self.s, self.last_action, self.t-1] = reward
+        self.s = state
+        self.last_action = action
+        self.t += 1
+
+        return action, self.policy
