@@ -41,8 +41,8 @@ class grid_world():
 			# states under option.
 			down = map[row_index+1:-1,col_index]
 			right = map[row_index,col_index+1:-1]
-			up = map[1:row_index,col_index]
-			left = map[row_index,1:col_index]
+			up = np.flip(map[1:row_index,col_index])
+			left = np.flip(map[row_index,1:col_index])
 			# length to wall (subtract one to get actual number of states).
 			m_down = len(map[row_index+1:,col_index])
 			m_right = len(map[row_index,col_index+1:])
@@ -62,7 +62,7 @@ class grid_world():
 
 			if m_up == 1: # length one to wall (i.e. -1)
 				self.P[s, o, s] = 1.0 # Still certain transition.
-				self.tau[s,0,s] = 1
+				self.tau[s,o,s] = 1.0
 					
 			# option 1: right.
 			o = 1
@@ -75,7 +75,7 @@ class grid_world():
 
 			if m_right == 1: # length one to wall (i.e. -1)
 				self.P[s, o, s] = 1.0 # Still certain transition.
-				self.tau[s,o,s] = 1
+				self.tau[s,o,s] = 1.0
 
 			# option 2: down.		
 			o = 2
@@ -89,7 +89,7 @@ class grid_world():
 
 			if m_down == 1: # length one to wall (i.e. -1)
 				self.P[s, o, s] = 1.0 # Still certain transition.
-				self.tau[s,o,s] = 1
+				self.tau[s,o,s] = 1.0
 
 			# option 3: left.	
 			o = 3
@@ -103,7 +103,7 @@ class grid_world():
 			
 			if m_left == 1: # length one to wall (i.e. -1)
 				self.P[s, o, s] = 1.0 # Still certain transition.					
-				self.tau[s,o,s] = 1
+				self.tau[s,o,s] = 1.0
 				
 
 			# Set to teleport uniformly in the actions setting
@@ -111,6 +111,7 @@ class grid_world():
 				for o in range(4):
 					for ss in range(self.nS):
 						self.P[s, o, ss] = 1/(self.nS-1) # uniformly for all except of yellow state i.e. 1/(S-1)=1/19 
+						self.tau[s,o,ss] = 1.0
 						if ss == self.nS-1: #if we get to the same 'yellow' state - happen with zero prob.:
 							self.P[s, o, ss] = 0
 			
@@ -135,37 +136,3 @@ class grid_world():
 
 		self.s = new_s
 		return new_s, reward, tau
-	
-
-def VI(env, max_iter = 10**3, epsilon = 10**(-2)):
-
-	# The variable containing the optimal policy estimate at the current iteration.
-	policy = np.zeros(env.nS, dtype=int)
-	niter = 0
-
-	# Initialise the value and epsilon as proposed in the course.
-	V0 = np.zeros(env.nS)
-	V1 = np.zeros(env.nS)
-
-	# The main loop of the Value Iteration algorithm.
-	while True:
-		niter += 1
-		for s in range(env.nS):
-			for a in range(env.nA):
-				temp = env.R[s, a] + sum([V * p for (V, p) in zip(V0, env.P[s, a])])
-				if (a == 0) or (temp > V1[s]):
-					V1[s] = temp
-					policy[s] = a
-		
-		# Testing the stopping criterion (+1 abitrary stop when 'max_iter' is reached).
-		gain = 0.5*(max(V1 - V0) + min(V1 - V0))
-		diff  = [abs(x - y) for (x, y) in zip(V1, V0)]
-		if (max(diff) - min(diff)) < epsilon:
-			return niter, V0, policy, gain
-		else:
-			V0 = V1
-			V1 = np.zeros(env.nS)
-		if niter > max_iter:
-			print("No convergence in VI after: ", max_iter, " steps!")
-			return niter, V0, policy, gain
-

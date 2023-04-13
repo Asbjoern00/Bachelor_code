@@ -198,7 +198,7 @@ class UCRL2_L:
 		self.policy = self.EVI()
 
 	# To reinitialize the model and a give the new initial state init.
-	def reset(self, init):
+	def reset(self, init=0):
 		# The "counter" variables:
 		self.Nk = np.zeros((self.nS, self.nA), dtype=int) # Number of occurences of (s, a) at the end of the last episode.
 		self.Nsas = np.zeros((self.nS, self.nA, self.nS), dtype=int) # Number of occureces of (s, a, s').
@@ -227,7 +227,7 @@ class UCRL2_L:
 		self.new_episode()
 
 	# To chose an action for a given state (and start a new episode if necessary -> stopping criterion defined here).
-	def play(self,state, reward):
+	def play(self,state, reward,tau):
 		if self.last_action >= 0: # Update if not first action.
 			self.Nsas[self.s, self.last_action, state] += 1
 			self.Rsa[self.s, self.last_action] += reward
@@ -274,10 +274,21 @@ class UCRL2(UCRL2_L):
 def run_experiment(enviroment, algorithm, T):
 	#initialize
 	reward = np.zeros(T)
+	tau = np.zeros(T)
+
 	enviroment.reset()
 	algorithm.reset(enviroment.s)
 	new_s = enviroment.s
-	for t in range(T):
-		action, _ = algorithm.play(new_s, reward[t-1])
-		new_s, reward[t] = enviroment.step(action)
-	return reward, algorithm.n_episodes
+	t = int(0) 
+	t_prev = int(t)
+
+	while t < T:
+		action, _  = algorithm.play(new_s, reward[t_prev], tau[t_prev])
+		new_s, reward[t] , tau[t]  = enviroment.step(action)
+		t_prev = int(t)
+		t += tau[t]
+		t = int(t)
+	reward = reward[:t]
+	tau = tau[:t]
+	
+	return reward,tau
