@@ -15,9 +15,9 @@ class UCRL_SMDP:
         self.tau_max = tau_max
         self.T_max = T_max
 
-        if self.tau_max is None and self.sigma_tau is None:
+        if self.tau_max is None and self.sigma_tau is None and self.T_max is not None:
             self.tau_max = self.T_max
-            self.sigma_tau = min(1,(self.T_max-1)/2) # Assuming bounded holding and a minimum holding time of 1            
+            self.sigma_tau = max(1,(self.T_max-1)/2) # Assuming bounded holding and a minimum holding time of 1            
 
         # For speedup of EVI
         self.current_bias_estimate = np.zeros(self.nS)
@@ -257,7 +257,7 @@ class BUS(UCRL_SMDP):
 
     def update_parameters(self):
         self.tau_max = self.current_T_max
-        self.sigma_tau = min(1,(self.current_T_max-1)/2) # Assuming bounded holding and a minimum holding time of 1
+        self.sigma_tau = max(1,(self.current_T_max-1)/2) # Assuming bounded holding and a minimum holding time of 1
     
     def sample_parameters(self):
         self.current_T_max = np.random.choice(self.T_max_grid, size = 1, p = self.current_sample_prop)
