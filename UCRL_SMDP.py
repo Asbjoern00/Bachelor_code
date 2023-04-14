@@ -1,6 +1,6 @@
 import numpy as np
 class UCRL_SMDP:
-    def __init__(self, nS, nA , delta, b_r, sigma_r, b_tau, sigma_tau, r_max, tau_min, tau_max):
+    def __init__(self, nS, nA , delta, b_r, sigma_r, b_tau, sigma_tau, r_max, tau_min, tau_max, T_max = None):
         
         #Assign attributes to instance
         self.nS = nS
@@ -13,6 +13,11 @@ class UCRL_SMDP:
         self.r_max = r_max
         self.tau_min = tau_min
         self.tau_max = tau_max
+        self.T_max = T_max
+
+        if self.tau_max is None and self.sigma_tau is None:
+            self.tau_max = self.T_max
+            self.sigma_tau = min(1,(self.T_max-1)/2) # Assuming bounded holding and a minimum holding time of 1            
 
         # For speedup of EVI
         self.current_bias_estimate = np.zeros(self.nS)
@@ -54,9 +59,6 @@ class UCRL_SMDP:
                 self.Nk[s, a] += self.vk[s, a]
 
 
-    def set_state(self, state):
-        self.current_state = state
-    
     def new_episode(self):
         self.updateN() # We update the counter Nk.
         self.vk = np.zeros((self.nS, self.nA))
@@ -147,6 +149,7 @@ class UCRL_SMDP:
         """
         niter = 0
         epsilon = self.r_max/np.sqrt(self.i)
+        sorted_indices = np.arange(self.nS)
         action_noise = [(np.random.random_sample() * 0.1 * min((1e-6, epsilon))) for _ in range(self.nA)]
 
         # The variable containing the optimistic policy estimate at the current iteration.
@@ -155,8 +158,6 @@ class UCRL_SMDP:
         # Initialise the value and epsilon as proposed in the course.
         V0 = self.current_bias_estimate # NB: setting it to the bias obtained at the last episode can help speeding up the convergence significantly!, Done!
         V1 = np.zeros(self.nS)
-        sorted_indices = np.argsort(V0)
-        
         r_tilde = np.zeros((self.nS, self.nA))
         tau_tilde = np.zeros((self.nS, self.nA))
         # The main loop of the Value Iteration algorithm.
@@ -183,11 +184,12 @@ class UCRL_SMDP:
             else:
                 V0 = V1
                 V1 = np.zeros(self.nS)
+                sorted_indices = np.argsort(V0)
             if niter > max_iter:
                 print(f"No convergence in EVI after: , {max_iter},  steps!. Actual diff was {max(diff)-min(diff)}, and epsilon = {epsilon}"  )
                 return policy
     
-    def play(self, state, reward,tau):
+    def play(self, state, reward, tau):
 
         if self.last_action >= 0: # Update if not first action.
             self.Nsas[self.s, self.last_action, state] += 1
@@ -201,7 +203,6 @@ class UCRL_SMDP:
 
         # Update the variables:
         self.vk[state, action] += 1
-        #self.obtained_rewards[self.s, self.last_action, self.t-1] = reward
         self.s = state
         self.last_action = action
         self.i += 1
@@ -231,8 +232,78 @@ class UCRL_SMDP:
             self.s = init
             self.last_action = -1
             self.i = 1
-
-            #self.obtained_rewards = np.empty((self.nS,self.nA,2*10**6))
             
             # Start the first episode.
             self.new_episode()
+
+class BUS(UCRL_SMDP):
+    def __init__(self, nS, nA, delta, b_r, sigma_r, b_tau, sigma_tau, r_max, tau_min, tau_max, T_max_grid):
+        self.T_max_grid = T_max_grid
+        self.loss_grid = np.zeros(len(T_max_grid)) # For sampling the algorithms
+        self.current_sample_prop = np.ones(len(T_max_grid))/len(T_max_grid)
+        super().__init__(nS, nA, delta, b_r, sigma_r, b_tau, sigma_tau, r_max, tau_min, tau_max)
+        
+        self.sample_parameters()
+        self.update_parameters()
+        
+    
+    def learning_rate(self):
+        return np.sqrt(np.log(len(self.T_max_grid))/(self.n_episodes*len(self.T_max_grid)))
+
+    def sample_prob(self):
+        numerator = np.exp(-self.learning_rate()*(self.loss_grid-np.min(self.loss_grid)))
+        self.numerator = numerator
+        self.current_sample_prop = numerator/np.sum(numerator)
+
+    def update_parameters(self):
+        self.tau_max = self.current_T_max
+        self.sigma_tau = min(1,(self.current_T_max-1)/2) # Assuming bounded holding and a minimum holding time of 1
+    
+    def sample_parameters(self):
+        self.current_T_max = np.random.choice(self.T_max_grid, size = 1, p = self.current_sample_prop)
+        self.current_T_max_index = np.where(self.current_T_max == self.T_max_grid)[0]
+
+    def play(self, state, reward, tau):
+
+        if self.last_action >= 0: # Update if not first action.
+            self.Nsas[self.s, self.last_action, state] += 1
+            self.Rsa[self.s, self.last_action] += reward
+            self.tausa[self.s, self.last_action] += tau
+            self.current_episode_loss += (self.r_max - reward)/(self.current_sample_prop[self.current_T_max_index])
+
+        action = self.policy[state]
+        if self.vk[state, action] > max([1, self.Nk[state, action]]): # Stoppping criterion
+            self.loss_grid[self.current_T_max_index] += self.current_episode_loss/np.sum(self.vk) # Update loss with average importance weighted loss of the episode
+            self.new_episode()
+            action  = self.policy[state]
+
+        # Update the variables:
+        self.vk[state, action] += 1
+        self.s = state
+        self.last_action = action
+        self.i += 1
+
+        return action, self.policy
+
+
+    def new_episode(self):
+        self.updateN() # We update the counter Nk.
+        self.vk = np.zeros((self.nS, self.nA))
+        self.current_episode_loss = 0
+        self.n_episodes +=1 # add to episode counter
+
+        # Update estimates, note that the estimates are 0 at first, the optimistic strategy making that irrelevant.
+        for s in range(self.nS):
+            for a in range(self.nA):
+                div = max([1, self.Nk[s, a]])
+                self.hatR[s, a] = self.Rsa[s, a] / div
+                self.hattau[s,a] = self.tausa[s,a] / div
+                for next_s in range(self.nS):
+                    self.hatP[s, a, next_s] = self.Nsas[s, a, next_s] / div
+
+        # Update the confidence intervals and policy.
+        self.sample_prob()
+        self.sample_parameters()
+        self.update_parameters() 
+        self.confidence()
+        self.policy = self.EVI()
