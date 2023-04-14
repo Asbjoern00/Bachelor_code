@@ -59,16 +59,20 @@ class grid_world():
 			if m_up>T_max: # further away than maximum.
 				self.P[s, o, up[:T_max]] = 1/(T_max) # use T_max in this case - ommit -1 - T_max elements.
 				self.tau[s,o,up[:T_max]] = range(1,T_max+1) # tau
+				self.tau_bar[s,o]=(T_max + 1)/2
+
 			if m_up<=T_max and m_up>1: # closer than max number of steps.
 				self.P[s, o, up] = 1/(m_up-1) # as there is one state less avaivable - also ommit -1.  
 				self.tau[s,o,up] = range(1,m_up) # tau
 			# find expected holding time for state option pair (see appendix F).
-			self.tau_bar[s,o]=(T_max + 1)/2
+				self.tau_bar[s,o]=(m_up + 1)/2
 			# define equivalent probabilities
-			self.P_eq[s,o] = (1-0.1)/(self.tau_bar[s,o])*self.P[s,o] 
 			if m_up == 1: # length one to wall (i.e. -1)
 				self.P[s, o, s] = 1.0 # Still certain transition.
 				self.tau[s,o,s] = 1.0
+				self.tau_bar[s,o]=(1 + 1)/2
+			self.P_eq[s,o] = (1-0.1)/(self.tau_bar[s,o])*self.P[s,o] 
+
 			self.P_eq[s,o,s] = (1-0.1)/(self.tau_bar[s,o])*(self.P[s,o,s]-1)+1
  
 					
@@ -77,16 +81,20 @@ class grid_world():
 			if m_right>T_max: # further away than maximum.
 				self.P[s, o, right[:T_max]] = 1/(T_max) # use T_max in this case - ommit -1 - T_max elements.
 				self.tau[s,o,right[:T_max]] = range(1,T_max+1) # tau
+				self.tau_bar[s,o]=(T_max + 1)/2
+
 			if m_right<=T_max and m_right>1: # closer than max number of steps.
 				self.P[s, o, right] = 1/(m_right-1) # as there is one state less avaivable - also ommit -1.  
 				self.tau[s,o,right] = range(1,m_right) # tau
 			# find expected holding time for state option pair (see appendix F).
-			self.tau_bar[s,o]=(T_max + 1)/2
+				self.tau_bar[s,o]=(m_right + 1)/2
 			# define equivalent probabilities
-			self.P_eq[s,o] = (1-0.1)/(self.tau_bar[s,o])*self.P[s,o] 
 			if m_right == 1: # length one to wall (i.e. -1)
 				self.P[s, o, s] = 1.0 # Still certain transition.
 				self.tau[s,o,s] = 1.0
+				self.tau_bar[s,o]=(1 + 1)/2
+			self.P_eq[s,o] = (1-0.1)/(self.tau_bar[s,o])*self.P[s,o] 
+
 			self.P_eq[s,o,s] = (1-0.1)/(self.tau_bar[s,o])*(self.P[s,o,s]-1)+1
 
 
@@ -95,17 +103,20 @@ class grid_world():
 			if m_down>T_max: # further away than maximum.
 				self.P[s, o, down[:T_max]] = 1/(T_max) # use T_max in this case - ommit -1 - T_max elements.
 				self.tau[s,o,down[:T_max]] = range(1,T_max+1) # tau
+				self.tau_bar[s,o]=(T_max + 1)/2
 
 			if m_down<=T_max and m_down>1: # closer than max number of steps.
 				self.P[s, o, down] = 1/(m_down-1) # as there is one state less avaivable - also ommit -1.  
 				self.tau[s,o,down] = range(1,m_down) # tau
 			# find expected holding time for state option pair (see appendix F).
-			self.tau_bar[s,o]=(T_max + 1)/2
+				self.tau_bar[s,o]=(m_down + 1)/2
 			# define equivalent probabilities
-			self.P_eq[s,o] = (1-0.1)/(self.tau_bar[s,o])*self.P[s,o] 
 			if m_down == 1: # length one to wall (i.e. -1)
 				self.P[s, o, s] = 1.0 # Still certain transition.
 				self.tau[s,o,s] = 1.0
+				self.tau_bar[s,o]=(1 + 1)/2
+			self.P_eq[s,o] = (1-0.1)/(self.tau_bar[s,o])*self.P[s,o] 
+
 			self.P_eq[s,o,s] = (1-0.1)/(self.tau_bar[s,o])*(self.P[s,o,s]-1)+1
 
 
@@ -114,17 +125,20 @@ class grid_world():
 			if m_left>T_max: # further away than maximum.
 				self.P[s, o, left[:T_max]] = 1/(T_max) # use T_max in this case - ommit -1 - T_max elements.
 				self.tau[s,o,left[:T_max]] = range(1,T_max+1) # tau
+				self.tau_bar[s,o]=(T_max + 1)/2
 
 			if m_left<=T_max and m_left>1: # closer than max number of steps.
 				self.P[s, o, left] = 1/(m_left-1) # as there is one state less avaivable - also ommit -1.  
 				self.tau[s,o,left] = range(1,m_left) # tau
 			# find expected holding time for state option pair (see appendix F).
-			self.tau_bar[s,o]=(T_max + 1)/2
+				self.tau_bar[s,o]=(m_left + 1)/2
 			# define equivalent probabilities
-			self.P_eq[s,o] = (1-0.1)/(self.tau_bar[s,o])*self.P[s,o] 			
 			if m_left == 1: # length one to wall (i.e. -1)
 				self.P[s, o, s] = 1.0 # Still certain transition.					
 				self.tau[s,o,s] = 1.0
+				self.tau_bar[s,o]=(1 + 1)/2
+			self.P_eq[s,o] = (1-0.1)/(self.tau_bar[s,o])*self.P[s,o] 			
+
 			self.P_eq[s,o,s] = (1-0.1)/(self.tau_bar[s,o])*(self.P[s,o,s]-1)+1
 
 				
