@@ -132,13 +132,13 @@ class UCRL_SMDP:
     
     # The Extended Value Iteration, perform an optimisitc VI over a set of MDP.
 	#Note, changed fixed epsilon to 1/sqrt(i)
-    def EVI(self, max_iter = 2*10**3):
+    def EVI(self, max_iter = 10**3):
         """Does EVI on extended by converting SMDP to equivalent extended MDP
 
         Parameters
         ----------
         max_iter : int, optional
-            Max iteration to run EVI for, by default 2*10**3
+            Max iteration to run EVI for, by default 10**3
 
         Returns
         -------
@@ -147,7 +147,6 @@ class UCRL_SMDP:
         """
         niter = 0
         epsilon = self.r_max/np.sqrt(self.i)
-        sorted_indices = np.arange(self.nS)
         action_noise = [(np.random.random_sample() * 0.1 * min((1e-6, epsilon))) for _ in range(self.nA)]
 
         # The variable containing the optimistic policy estimate at the current iteration.
@@ -156,6 +155,8 @@ class UCRL_SMDP:
         # Initialise the value and epsilon as proposed in the course.
         V0 = self.current_bias_estimate # NB: setting it to the bias obtained at the last episode can help speeding up the convergence significantly!, Done!
         V1 = np.zeros(self.nS)
+        sorted_indices = np.argsort(V0)
+        
         r_tilde = np.zeros((self.nS, self.nA))
         tau_tilde = np.zeros((self.nS, self.nA))
         # The main loop of the Value Iteration algorithm.
@@ -182,9 +183,8 @@ class UCRL_SMDP:
             else:
                 V0 = V1
                 V1 = np.zeros(self.nS)
-                sorted_indices = np.argsort(V0)
             if niter > max_iter:
-                print("No convergence in EVI after: ", max_iter, " steps!", maxp)
+                print(f"No convergence in EVI after: , {max_iter},  steps!. Actual diff was {max(diff)-min(diff)}, and epsilon = {epsilon}"  )
                 return policy
     
     def play(self, state, reward,tau):

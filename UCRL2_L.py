@@ -3,65 +3,6 @@
 import numpy as np
 import copy as cp
 
-####################################################################################################################################################
-####################################################################################################################################################
-####################################################################################################################################################
-
-#																	VI and PI
-
-####################################################################################################################################################
-####################################################################################################################################################
-####################################################################################################################################################
-
-
-
-
-
-
-# An implementation of the Value Iteration algorithm for a given environment 'env' in an average reward setting.
-# An arbitrary 'max_iter' is a maximum number of iteration, usefull to catch any error in your code!
-# Return the number of iterations, the final value, the optimal policy and the gain.
-def VI(env, max_iter = 10**3, epsilon = 10**(-2)):
-
-	# The variable containing the optimal policy estimate at the current iteration.
-	policy = np.zeros(env.nS, dtype=int)
-	niter = 0
-
-	# Initialise the value and epsilon as proposed in the course.
-	V0 = np.zeros(env.nS)
-	V1 = np.zeros(env.nS)
-
-	# The main loop of the Value Iteration algorithm.
-	while True:
-		niter += 1
-		for s in range(env.nS):
-			for a in range(env.nA):
-				temp = env.R[s, a] + sum([V * p for (V, p) in zip(V0, env.P[s, a])])
-				if (a == 0) or (temp > V1[s]):
-					V1[s] = temp
-					policy[s] = a
-		
-		# Testing the stopping criterion (+1 abitrary stop when 'max_iter' is reached).
-		gain = 0.5*(max(V1 - V0) + min(V1 - V0))
-		diff  = [abs(x - y) for (x, y) in zip(V1, V0)]
-		if (max(diff) - min(diff)) < epsilon:
-			return niter, V0, policy, gain
-		else:
-			V0 = V1
-			V1 = np.zeros(env.nS)
-		if niter > max_iter:
-			print("No convergence in VI after: ", max_iter, " steps!")
-			return niter, V0, policy, gain
-
-
-
-
-
-
-
-
-
-
 
 ####################################################################################################################################################
 ####################################################################################################################################################
@@ -81,7 +22,6 @@ class UCRL2_L:
 		self.nA = nA
 		self.delta = delta / (2* nS * nA)# As used in proof of lemma 5 in the original paper.
 		self.s = None
-		self.obtained_rewards = np.empty((self.nS,self.nA,2*10**6))
 		self.n_episodes = 0 # added
 		self.t = 1  #added counter 
 		self.current_bias_estimate = np.zeros(self.nS) # for speed-up of EVI
@@ -145,7 +85,6 @@ class UCRL2_L:
 	def EVI(self, max_iter = 2*10**3):
 		niter = 0
 		epsilon = 1/np.sqrt(self.t)
-		sorted_indices = np.arange(self.nS)
 		action_noise = [(np.random.random_sample() * 0.1 * min((1e-6, epsilon))) for _ in range(self.nA)]
 
 		# The variable containing the optimistic policy estimate at the current iteration.
@@ -154,6 +93,7 @@ class UCRL2_L:
 		# Initialise the value and epsilon as proposed in the course.
 		V0 = self.current_bias_estimate # NB: setting it to the bias obtained at the last episode can help speeding up the convergence significantly!, Done!
 		V1 = np.zeros(self.nS)
+		sorted_indices = np.argsort(V0)
 
 		# The main loop of the Value Iteration algorithm.
 		while True:
@@ -174,7 +114,6 @@ class UCRL2_L:
 			else:
 				V0 = V1
 				V1 = np.zeros(self.nS)
-				sorted_indices = np.argsort(V0)
 			if niter > max_iter:
 				print("No convergence in EVI after: ", max_iter, " steps!", maxp)
 				return policy
@@ -221,7 +160,6 @@ class UCRL2_L:
 		self.last_action = -1
 		self.t = 1
 
-		self.obtained_rewards = np.empty((self.nS,self.nA,2*10**6))
 		
 		# Start the first episode.
 		self.new_episode()
@@ -239,7 +177,6 @@ class UCRL2_L:
 		
 		# Update the variables:
 		self.vk[state, action] += 1
-		self.obtained_rewards[self.s, self.last_action, self.t-1] = reward
 		self.s = state
 		self.last_action = action
 		self.t += 1
@@ -256,39 +193,3 @@ class UCRL2(UCRL2_L):
 				n = max(1, self.Nk[s, a])
 				self.confR[s, a] = np.sqrt((3.5/n) * np.log(2 * self.nS * self.nA * self.t / d))
 				self.confP[s, a] = np.sqrt((14 * self.nS/n * np.log(2*self.nA*self.t/d)))
-				
-
-
-####################################################################################################################################################
-####################################################################################################################################################
-####################################################################################################################################################
-
-#																	Running experiments
-
-####################################################################################################################################################
-####################################################################################################################################################
-####################################################################################################################################################
-
-
-# New function to make single run of experiment that returns "pure values" instead of plots
-def run_experiment(enviroment, algorithm, T):
-	#initialize
-	reward = np.zeros(T)
-	tau = np.zeros(T)
-
-	enviroment.reset()
-	algorithm.reset(enviroment.s)
-	new_s = enviroment.s
-	t = int(0) 
-	t_prev = int(t)
-
-	while t < T:
-		action, _  = algorithm.play(new_s, reward[t_prev], tau[t_prev])
-		new_s, reward[t] , tau[t]  = enviroment.step(action)
-		t_prev = int(t)
-		t += tau[t]
-		t = int(t)
-	reward = reward[:t]
-	tau = tau[:t]
-	
-	return reward,tau
