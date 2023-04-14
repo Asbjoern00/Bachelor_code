@@ -199,3 +199,4 @@ def VI(env, max_iter = 10**3, epsilon = 10**(-4)):
 		if niter > max_iter:
 			print("No convergence in VI after: ", max_iter, " steps!")
 			return niter, V0, policy, gain
+print(10+1)
