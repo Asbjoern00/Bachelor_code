@@ -1,6 +1,6 @@
 import numpy as np
 class UCRL_SMDP:
-    def __init__(self, nS, nA , delta, b_r, sigma_r, b_tau, sigma_tau, r_max, tau_min, tau_max, T_max = None):
+    def __init__(self, nS, nA , delta=0.05, b_r=1, sigma_r=1/2, b_tau=1, r_max=1, tau_min=1, sigma_tau=None, tau_max=None, T_max = None):
         
         #Assign attributes to instance
         self.nS = nS
@@ -14,6 +14,7 @@ class UCRL_SMDP:
         self.tau_min = tau_min
         self.tau_max = tau_max
         self.T_max = T_max
+        self.episode_ended = False
 
         if self.tau_max is None and self.sigma_tau is None and self.T_max is not None:
             self.tau_max = self.T_max
@@ -76,7 +77,9 @@ class UCRL_SMDP:
         # Update the confidence intervals and policy.
         self.confidence()
         self.policy = self.EVI()
-
+    
+    def set_state(self, state):
+        self.s = state
 
 
     def confidence(self):
@@ -198,6 +201,7 @@ class UCRL_SMDP:
 
         action = self.policy[state]
         if self.vk[state, action] > max([1, self.Nk[state, action]]): # Stoppping criterion
+            self.episode_ended = True
             self.new_episode()
             action  = self.policy[state]
 
@@ -263,13 +267,14 @@ class BUS(UCRL_SMDP):
         self.current_T_max = np.random.choice(self.T_max_grid, size = 1, p = self.current_sample_prop)
         self.current_T_max_index = np.where(self.current_T_max == self.T_max_grid)[0]
 
-    def play(self, state, reward, tau):
+    def play(self, state, reward, tau, sample_prob):
 
         if self.last_action >= 0: # Update if not first action.
             self.Nsas[self.s, self.last_action, state] += 1
             self.Rsa[self.s, self.last_action] += reward
             self.tausa[self.s, self.last_action] += tau
-            self.current_episode_loss += (self.r_max - reward)/(self.current_sample_prop[self.current_T_max_index])
+
+            self.current_episode_loss += (self.r_max - reward)/(sample_prob) # Added for compatibility w. BUS-like algos
 
         action = self.policy[state]
         if self.vk[state, action] > max([1, self.Nk[state, action]]): # Stoppping criterion
@@ -307,3 +312,68 @@ class BUS(UCRL_SMDP):
         self.update_parameters() 
         self.confidence()
         self.policy = self.EVI()
+
+class BUS2():
+    def __init__(self, nS, nA ,T_max_grid, delta=0.05, b_r=1, sigma_r=1/2, b_tau=1, r_max=1, tau_min = 1):
+        self.nS = nS
+        self.nA = nA
+        self.delta = delta
+        self.b_r = b_r
+        self.sigma_r = sigma_r
+        self.b_tau = b_tau
+        self.r_max = r_max
+        self.tau_min = tau_min
+        self.T_max_grid = T_max_grid
+
+        self.loss_grid = np.zeros(len(T_max_grid)) # For sampling the algorithms
+        self.current_sample_prop = np.ones(len(T_max_grid))/len(T_max_grid)
+        
+        self.algorithms = [UCRL_SMDP(nS = self.nS, nA = self.nA, delta = self.delta, b_r = self.b_r, sigma_r=self.sigma_r, b_tau=self.b_tau, tau_min=self.tau_min, T_max=t)
+                            for t in T_max_grid]
+        
+        self.sample_parameters()
+
+
+    def learning_rate(self):
+        self.n_episodes = sum([self.algorithms[i].n_episodes for i in range(len(self.T_max_grid))])
+        return np.sqrt(np.log(len(self.T_max_grid))/(self.n_episodes*len(self.T_max_grid)))
+
+    def sample_prob(self):
+        numerator = np.exp(-self.learning_rate()*(self.loss_grid-np.min(self.loss_grid)))
+        self.current_sample_prop = numerator/np.sum(numerator)
+    
+    def sample_parameters(self):
+        self.current_episode_loss = 0 
+        self.current_T_max = np.random.choice(self.T_max_grid, size = 1, p = self.current_sample_prop)
+        self.current_T_max_index = np.where(self.current_T_max == self.T_max_grid)[0]
+        self.current_algorithm = self.algorithms[int(self.current_T_max_index)]
+    
+    def reset(self, s):
+        self.s = 0 
+        self.loss_grid = np.zeros(len(self.T_max_grid)) # For sampling the algorithms
+        self.current_sample_prop = np.ones(len(self.T_max_grid))/len(self.T_max_grid)
+
+        for i in range(len(self.T_max_grid)):
+            self.algorithms[i].reset()
+
+
+    def play(self, state, reward, tau):
+
+        if self.current_algorithm.episode_ended:
+            self.current_algorithm.episode_ended = False
+            state = self.current_algorithm.s # store the current state so can be transfered to the next sampled algo
+            self.loss_grid[self.current_T_max_index] += (self.current_episode_loss/self.current_sample_prop[self.current_T_max_index])*1/self.current_episode_length
+            self.sample_prob() # calculate new distribution
+            self.sample_parameters() # do sampling
+            self.current_algorithm.s = state # update state of current algo 
+            self.play(state, reward, tau) # play current algo
+        
+
+        self.current_episode_loss += (self.r_max - reward) # add loss for current episode
+        self.current_episode_length = np.sum(self.current_algorithm.vk) # find length of episode
+        action, policy = self.current_algorithm.play(state, reward, tau) # play current algo
+
+        
+            
+        return action,policy
+
