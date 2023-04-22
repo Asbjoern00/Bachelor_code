@@ -82,3 +82,39 @@ def VI(env, max_iter = 10**3, epsilon = 10**(-2)):
 			print("No convergence in VI after: ", max_iter, " steps!")
 			return niter, V0, policy, gain
 
+def alpha(t):
+    return 2/((t)**(2/3)+1)
+
+
+def QL_SMDP(env,T):
+    policy = np.zeros(env.nS)
+    niter = 1
+    epsilon = 1/np.sqrt(niter) # exploration term
+    Nk = np.zeros((env.nS, env.nA), dtype=int) # Number of occurences of (s, a) at the end of the last episode.
+    Nsas = np.zeros((env.nS, env.nA, env.nS), dtype=int) # Number of occureces of (s, a, s').
+	# Initialise the value and epsilon as proposed in the course.
+    Q0 = np.zeros((env.nS,env.nA))
+    s = env.s # initial state.
+    a = np.argmax(Q0[env.s,:])
+    for i in range(T):
+            print(niter)
+            niter +=1 # increment t.
+            new_s, reward, tau = env.step(a) # take new action
+            Nk[s,a] += 1
+            Nsas[s,a,new_s] += 1
+            alpha = 2/((Nk[s,a])**(2/3)+1)
+            delta = reward + np.max(Q0[new_s,:])-Q0[s,a]
+            Q0[s,a] = Q0[s,a] + alpha*delta
+            s = new_s # update
+            dum = np.random.choice(2,replace=True,p = [epsilon,1-epsilon])
+            if dum ==1: # i.e. greedily chosen:
+                a = np.argmax(Q0[env.s,:]) # find next action
+            else:
+                a = np.random.choice(env.nA,replace = True)
+            policy = np.argmax(Q0,axis = 1)
+    return policy,Q0
+
+
+	
+	
+	

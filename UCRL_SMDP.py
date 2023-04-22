@@ -105,7 +105,6 @@ class UCRL_SMDP:
     
     def max_proba(self, sorted_indices, s, a):
         """Maximizes over probability distribution in confidence set
-
         Parameters
         ----------
         sorted_indices : np.array
@@ -114,7 +113,6 @@ class UCRL_SMDP:
             integer representation of state
         a : int
             integer representation of action
-
         Returns
         -------
         max_p: np.array
@@ -137,14 +135,13 @@ class UCRL_SMDP:
     
     # The Extended Value Iteration, perform an optimisitc VI over a set of MDP.
 	#Note, changed fixed epsilon to 1/sqrt(i)
+
     def EVI(self, max_iter = 10**3):
         """Does EVI on extended by converting SMDP to equivalent extended MDP
-
         Parameters
         ----------
         max_iter : int, optional
             Max iteration to run EVI for, by default 10**3
-
         Returns
         -------
         policy : np.array
@@ -245,8 +242,9 @@ class BUS(UCRL_SMDP):
         self.T_max_grid = T_max_grid
         self.loss_grid = np.zeros(len(T_max_grid)) # For sampling the algorithms
         self.current_sample_prop = np.ones(len(T_max_grid))/len(T_max_grid)
-        super().__init__(nS, nA, delta, b_r, sigma_r, b_tau, sigma_tau, r_max, tau_min, tau_max)
         
+        super().__init__(nS, nA, delta, b_r, sigma_r, b_tau, sigma_tau, r_max, tau_min, tau_max)
+        self.r_max = 1 # do this manually.
         self.sample_parameters()
         self.update_parameters()
         
@@ -258,6 +256,7 @@ class BUS(UCRL_SMDP):
         numerator = np.exp(-self.learning_rate()*(self.loss_grid-np.min(self.loss_grid)))
         self.numerator = numerator
         self.current_sample_prop = numerator/np.sum(numerator)
+        return self.current_sample_prop
 
     def update_parameters(self):
         self.tau_max = self.current_T_max
@@ -267,14 +266,14 @@ class BUS(UCRL_SMDP):
         self.current_T_max = np.random.choice(self.T_max_grid, size = 1, p = self.current_sample_prop)
         self.current_T_max_index = np.where(self.current_T_max == self.T_max_grid)[0]
 
-    def play(self, state, reward, tau, sample_prob):
+    def play(self, state, reward, tau):
 
         if self.last_action >= 0: # Update if not first action.
             self.Nsas[self.s, self.last_action, state] += 1
             self.Rsa[self.s, self.last_action] += reward
             self.tausa[self.s, self.last_action] += tau
-
-            self.current_episode_loss += (self.r_max - reward)/(sample_prob) # Added for compatibility w. BUS-like algos
+            sample_prob = self.sample_prob() # calculate new distribution
+            self.current_episode_loss += (self.r_max - reward)/(sample_prob[self.current_T_max_index]) # Added for compatibility w. BUS-like algos
 
         action = self.policy[state]
         if self.vk[state, action] > max([1, self.Nk[state, action]]): # Stoppping criterion
@@ -376,4 +375,3 @@ class BUS2():
         
             
         return action,policy
-
