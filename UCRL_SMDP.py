@@ -1,6 +1,6 @@
 import numpy as np
 class UCRL_SMDP:
-    def __init__(self, nS, nA , delta=0.05, b_r=1, sigma_r=1/2, b_tau=1, r_max=1, tau_min=1, sigma_tau=None, tau_max=None, T_max = None):
+    def __init__(self, nS, nA, delta=0.05, b_r=1, sigma_r=1/2, b_tau=1, r_max=1, tau_min=1, sigma_tau=None, tau_max=None, T_max = None,imprv=False):
         
         #Assign attributes to instance
         self.nS = nS
@@ -14,6 +14,7 @@ class UCRL_SMDP:
         self.tau_min = tau_min
         self.tau_max = tau_max
         self.T_max = T_max
+        self.imprv = imprv
         self.episode_ended = False
 
         if self.tau_max is None and self.sigma_tau is None and self.T_max is not None:
@@ -85,24 +86,37 @@ class UCRL_SMDP:
     def confidence(self):
         """Computes confidence intervals. See section *Confidence Intervals* in Fruit
         """
-        for s in range(self.nS):
-            for a in range(self.nA):                                
-                n = max(1,self.Nk[s,a])
-                #Probability
-                self.confP[s,a] = np.sqrt( (14 * self.nS * np.log(2*self.nA*self.i/self.delta) ) / (n) )
-                
-                #Holding time
-                if self.Nk[s,a] >= (2*self.b_tau**2)/(self.sigma_tau**2)*np.log((240*self.nS*self.nA*self.i**7)/ (self.delta)):
-                    self.conftau[s,a] = self.sigma_tau * np.sqrt( (14 * np.log(2*self.nS*self.nA*self.i/self.delta) ) / (n))
-                else:
-                    self.conftau[s,a] = 14 * self.b_tau *  ( np.log(2*self.nS*self.nA*self.i/self.delta) ) / (n)
+        if self.imprv == False:
+            for s in range(self.nS):
+                for a in range(self.nA):                                
+                    n = max(1,self.Nk[s,a])
+                    #Probability
+                    self.confP[s,a] = np.sqrt( (14 * self.nS * np.log(2*self.nA*self.i/self.delta) ) / (n) )
+                    
+                    #Holding time
+                    if self.Nk[s,a] >= (2*self.b_tau**2)/(self.sigma_tau**2)*np.log((240*self.nS*self.nA*self.i**7)/ (self.delta)):
+                        self.conftau[s,a] = self.sigma_tau * np.sqrt( (14 * np.log(2*self.nS*self.nA*self.i/self.delta) ) / (n))
+                    else:
+                        self.conftau[s,a] = 14 * self.b_tau *  ( np.log(2*self.nS*self.nA*self.i/self.delta) ) / (n)
 
-                #Rewards
-                if self.Nk[s,a] >= (2*self.b_r**2)/(self.sigma_r**2)*np.log((240*self.nS*self.nA*self.i**7)/ (self.delta)):
-                    self.confR[s,a] = self.sigma_r * np.sqrt( (14 * np.log(2*self.nS*self.nA*self.i/self.delta) ) / (n))
-                else:
-                    self.confR[s,a] = 14 * self.b_r *  ( np.log(2*self.nS*self.nA*self.i/self.delta) ) / (n)
-    
+                    #Rewards
+                    if self.Nk[s,a] >= (2*self.b_r**2)/(self.sigma_r**2)*np.log((240*self.nS*self.nA*self.i**7)/ (self.delta)):
+                        self.confR[s,a] = self.sigma_r * np.sqrt( (14 * np.log(2*self.nS*self.nA*self.i/self.delta) ) / (n))
+                    else:
+                        self.confR[s,a] = 14 * self.b_r *  ( np.log(2*self.nS*self.nA*self.i/self.delta) ) / (n)
+        if self.imprv == True: # improved confidence.
+            for s in range(self.nS):
+                for a in range(self.nA):                                
+                    n = max(1,self.Nk[s,a])
+                    #Probability
+                    self.confP[s,a] = np.sqrt( (2*(1+1/n) * self.nS * np.log(20*self.nS*self.nA*self.i**7*np.sqrt(n+1)*(2**(self.nS)-2)/self.delta) ) / (n) )
+                    
+                    #Holding time
+                    self.conftau[s,a] = self.sigma_tau * np.sqrt( (2 * (1+1/n) * np.log(np.sqrt(n+1)*120*self.nS*self.nA*self.i**7/self.delta) ) / (n))
+
+                    #Rewards
+                    self.confR[s,a] = self.sigma_r * np.sqrt( (2 * (1+1/n) * np.log(np.sqrt(n+1)*120*self.nS*self.nA*self.i**7/self.delta) ) / (n))
+
     def max_proba(self, sorted_indices, s, a):
         """Maximizes over probability distribution in confidence set
         Parameters
