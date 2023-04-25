@@ -109,13 +109,13 @@ class UCRL_SMDP:
                 for a in range(self.nA):                                
                     n = max(1,self.Nk[s,a])
                     #Probability
-                    self.confP[s,a] = np.sqrt( (2*(1+1/n) * self.nS * np.log(20*self.nS*self.nA*self.i**7*np.sqrt(n+1)*(2**(self.nS)-2)/self.delta) ) / (n) )
+                    self.confP[s,a] = np.sqrt( (2*(1+1/n) * np.log(np.sqrt(n+1)*self.nS*self.nA*(2**(self.nS)-2)/self.delta) ) / (n) )
                     
                     #Holding time
-                    self.conftau[s,a] = self.sigma_tau * np.sqrt( (2 * (1+1/n) * np.log(np.sqrt(n+1)*120*self.nS*self.nA*self.i**7/self.delta) ) / (n))
+                    self.conftau[s,a] = self.sigma_tau * np.sqrt( (2 * (1+1/n) *self.nS*self.nA* np.log(np.sqrt(n+1)/self.delta) ) / (n))
 
                     #Rewards
-                    self.confR[s,a] = self.sigma_r * np.sqrt( (2 * (1+1/n) * np.log(np.sqrt(n+1)*120*self.nS*self.nA*self.i**7/self.delta) ) / (n))
+                    self.confR[s,a] = self.sigma_r * np.sqrt( (2 * (1+1/n) *self.nS*self.nA* np.log(np.sqrt(n+1)/self.delta) ) / (n))
 
     def max_proba(self, sorted_indices, s, a):
         """Maximizes over probability distribution in confidence set
