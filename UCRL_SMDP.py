@@ -1,25 +1,29 @@
 import numpy as np
 class UCRL_SMDP:
-    def __init__(self, nS, nA, delta=0.05, b_r=1, sigma_r=1/2, b_tau=1, r_max=1, tau_min=1, sigma_tau=None, tau_max=None, T_max = None,imprv=False):
+    def __init__(self, nS, nA, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min=1, sigma_r=None, sigma_tau=None, tau_max=None, T_max = None,imprv=False):
         
         #Assign attributes to instance
         self.nS = nS
         self.nA = nA
         self.delta = delta
         self.b_r = b_r
-        self.sigma_r = sigma_r
         self.b_tau = b_tau
         self.sigma_tau = sigma_tau
         self.r_max = r_max
+
         self.tau_min = tau_min
         self.tau_max = tau_max
         self.T_max = T_max
+        self.sigma_r = sigma_r
         self.imprv = imprv
         self.episode_ended = False
 
-        if self.tau_max is None and self.sigma_tau is None and self.T_max is not None:
+        if (self.tau_max is None) and (self.sigma_r is None) and (self.sigma_tau is None) and (self.T_max is not None):
             self.tau_max = self.T_max
-            self.sigma_tau = max(1,(self.T_max-1)/2) # Assuming bounded holding and a minimum holding time of 1            
+            self.sigma_tau = max(1,(self.T_max-1)/2) # Assuming bounded holding and a minimum holding time of 1   
+            self.sigma_r = self.r_max*self.tau_max/2 # Assuming bounded holding and a minimum holding time of 1 
+
+        
 
         # For speedup of EVI
         self.current_bias_estimate = np.zeros(self.nS)
@@ -104,6 +108,8 @@ class UCRL_SMDP:
                         self.confR[s,a] = self.sigma_r * np.sqrt( (14 * np.log(2*self.nS*self.nA*self.i/self.delta) ) / (n))
                     else:
                         self.confR[s,a] = 14 * self.b_r *  ( np.log(2*self.nS*self.nA*self.i/self.delta) ) / (n)
+        """Computes improvesconfidence intervals. See Sadegh's note
+        """
         if self.imprv == True: # improved confidence.
             for s in range(self.nS):
                 for a in range(self.nA):                                
@@ -239,6 +245,7 @@ class UCRL_SMDP:
             # Confidence intervals:
             self.confR = np.zeros((self.nS, self.nA))
             self.confP = np.zeros((self.nS, self.nA))
+            self.conftau = np.zeros((self.nS, self.nA))
 
             # The current policy (updated at each episode).
             self.policy = np.zeros((self.nS,), dtype=int)
@@ -252,13 +259,12 @@ class UCRL_SMDP:
             self.new_episode()
 
 class BUS(UCRL_SMDP):
-    def __init__(self, nS, nA, delta, b_r, sigma_r, b_tau, sigma_tau, r_max, tau_min, tau_max, T_max_grid):
+    def __init__(self, nS, nA, delta, b_r, sigma_r, b_tau, sigma_tau, r_max, tau_min, tau_max, T_max_grid,imprv):
         self.T_max_grid = T_max_grid
         self.loss_grid = np.zeros(len(T_max_grid)) # For sampling the algorithms
         self.current_sample_prop = np.ones(len(T_max_grid))/len(T_max_grid)
         
-        super().__init__(nS, nA, delta, b_r, sigma_r, b_tau, sigma_tau, r_max, tau_min, tau_max)
-        self.r_max = 1 # do this manually.
+        super().__init__(nS, nA, delta, b_r, b_tau,r_max,tau_min, sigma_r, sigma_tau, tau_max,imprv)
         self.sample_parameters()
         self.update_parameters()
         
@@ -275,7 +281,9 @@ class BUS(UCRL_SMDP):
     def update_parameters(self):
         self.tau_max = self.current_T_max
         self.sigma_tau = max(1,(self.current_T_max-1)/2) # Assuming bounded holding and a minimum holding time of 1
-    
+        self.sigma_r = self.r_max*self.tau_max/2 # Assuming bounded holding and a minimum holding time of 1 
+
+
     def sample_parameters(self):
         self.current_T_max = np.random.choice(self.T_max_grid, size = 1, p = self.current_sample_prop)
         self.current_T_max_index = np.where(self.current_T_max == self.T_max_grid)[0]
@@ -327,21 +335,20 @@ class BUS(UCRL_SMDP):
         self.policy = self.EVI()
 
 class BUS2():
-    def __init__(self, nS, nA ,T_max_grid, delta=0.05, b_r=1, sigma_r=1/2, b_tau=1, r_max=1, tau_min = 1):
+    def __init__(self, nS, nA ,T_max_grid, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min = 1,imprv=False):
         self.nS = nS
         self.nA = nA
         self.delta = delta
         self.b_r = b_r
-        self.sigma_r = sigma_r
         self.b_tau = b_tau
         self.r_max = r_max
         self.tau_min = tau_min
         self.T_max_grid = T_max_grid
-
+        self.imprv = imprv
         self.loss_grid = np.zeros(len(T_max_grid)) # For sampling the algorithms
         self.current_sample_prop = np.ones(len(T_max_grid))/len(T_max_grid)
         
-        self.algorithms = [UCRL_SMDP(nS = self.nS, nA = self.nA, delta = self.delta, b_r = self.b_r, sigma_r=self.sigma_r, b_tau=self.b_tau, tau_min=self.tau_min, T_max=t)
+        self.algorithms = [UCRL_SMDP(nS = self.nS, nA = self.nA, delta = self.delta, b_r = self.b_r, b_tau=self.b_tau, tau_min=self.tau_min, T_max=t,imprv=self.imprv)
                             for t in T_max_grid]
         
         self.sample_parameters()
