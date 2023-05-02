@@ -17,7 +17,7 @@ import copy as cp
 
 # A simple implementation of the UCRL2 algorithm from Jacksh et al. 2010 with improved L1-Laplace confidence intervals.
 class UCRL2_L:
-	def __init__(self, nS, nA, delta = 0.05):
+	def __init__(self, nS, nA, delta = 0.05, T_max = None):
 		self.nS = nS
 		self.nA = nA
 		self.delta = delta / (2* nS * nA)# As used in proof of lemma 5 in the original paper.

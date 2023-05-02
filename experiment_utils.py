@@ -1,16 +1,22 @@
 import numpy as np
+import os
+from joblib import delayed, Parallel
+import tqdm
+import matplotlib.pyplot as plt
 
-def run_experiment(enviroment, algorithm, T):
+def run_experiment(environment, algorithm, T, write_to_csv = False):
     """Function to execute algorithm on environment for T timesteps in the natural process
 
     Parameters
     ----------
-    enviroment : instance of gridworld
+    environment : instance of gridworld
         The instance of gridworld (or potentially other environments) to run algorithm on
     algorithm : Instance of UCRL-variant
         The algorithm to run
     T : int
         Time horizon in the natural process
+    write_to_csv : bool
+        Whether to write to csv or not. If true will write to npy file in /results_experiment/S_{cardinality of S} formatedded as 'algorithm_T_max_{T_max}.npy'
 
     Returns
     -------
@@ -21,11 +27,11 @@ def run_experiment(enviroment, algorithm, T):
     #initialize
     reward = np.zeros(T)
     tau = np.zeros(T)
-
     # Reset environment and algo 
-    enviroment.reset()
-    algorithm.reset(enviroment.s)
-    new_s = enviroment.s
+    environment.reset()
+    s = environment.s
+    algorithm.reset(s)
+    new_s = environment.s
 
     #init timesteps
     t = int(0) 
@@ -33,13 +39,24 @@ def run_experiment(enviroment, algorithm, T):
 
     while t < T:
         action, _  = algorithm.play(new_s, reward[t_prev], tau[t_prev])
-        new_s, reward[t] , tau[t]  = enviroment.step(action)
+        new_s, reward[t] , tau[t]  = environment.step(action)
         t_prev = int(t)
         t += tau[t]
         t = int(t)
     reward = reward[:t]
     tau = tau[:t]
 
+    if write_to_csv: 
+            out = np.array([reward, tau]).T
+            algo_name = algorithm.__class__.__name__
+            if hasattr(algorithm, "imprv"):
+                  if algorithm.imprv:
+                        algo_name += "-L"
+            dir = f"experiment_results/S_{environment.nS}"
+            if not os.path.exists(dir):
+                  os.makedirs(dir)
+            np.save(file = f"{dir}/{algo_name}_T_max_{environment.T_max}", arr = out)
+    
     return reward,tau
 
 def calc_regret(reward, tau, optimal_gain):
@@ -47,6 +64,125 @@ def calc_regret(reward, tau, optimal_gain):
     regret = T_n*optimal_gain - np.cumsum(reward)
     return regret
 
+def create_multiple_envs(nS_list,T_max_list ,base_env):
+    """Functionality to create list of multiple instances of same base environment
+
+    Parameters
+    ----------
+    nS_list : lst
+        List of N-states for the environments
+    T_max_list : lst
+        List of T_max for the environments
+    base_env : Environment class
+        The base environment class to derive from
+
+    Returns
+    -------
+    lst
+        list of environments
+    """
+    return [base_env(nS = nS, T_max = T_max) for T_max,nS in zip(T_max_list, nS_list)]
+
+def create_multiple_algos(base_algo, nS_list, T_max_list, **kwargs):
+      """Functionality to create list of multiple instances of same base environment
+
+    Parameters
+    ----------
+    nS_list : lst
+        List of N-states for the environments
+    T_max_list : lst
+        List of T_max for the environments
+    base_env : algorithm class
+        The base algorithm class to derive from
+
+    Returns
+    -------
+    lst
+        list of algorithm
+    """
+      return [base_algo(nS = nS, T_max = T_max, **kwargs) for T_max,nS in zip(T_max_list, nS_list)]
+
+def run_multiple_experiments(algorithm_list, environment_list, T, write_to_csv=False):
+    """Runs experiment on lists of algorithms and environments
+
+    Parameters
+    ----------
+    algorithm_list : lst
+        algorithm list
+    environment_list : lst
+        environment lst
+    T : int
+        Time to run for
+    write_to_csv : bool, optional
+        Whether to write to npy file, see the run_experiment function, by default False
+
+    Returns
+    -------
+    lst
+        List of length equal to input lists. Therefore output is indexed as output[i] = algorithm_list[i] run on environment_list[i]
+    """
+    ls = []
+    for algorithm, environment in zip(algorithm_list, environment_list):
+        ls.append(run_experiment(environment, algorithm, T = T, write_to_csv=write_to_csv))
+    return ls
+
+def run_multiple_experiments_n_reps(algorithm_list, environment_list, T, n_reps = 10, save=False):
+    """Runs multiple experiments multiple times. Is essentially just a joblib wrapper
+
+    Parameters
+    ----------
+    algorithm_list : lst
+        algorithm list
+    environment_list : lst
+        environment lst
+    T : int
+        Time to run for
+    write_to_csv : bool, optional
+        Whether to write to npy file, see the run_experiment function, by default False
+    n_reps : int
+        How many times to run each experiment for
+
+    Returns
+    -------
+    dict
+        dict containing results for each algorithm over the n_reps run. The keys are formatted as {algo_name}_{T_max}
+    """
+    results = Parallel(n_jobs=-1)(delayed(run_multiple_experiments)(algorithm_list, environment_list, T) for i in tqdm.tqdm(range(n_reps)))
+    result_dict = {}
+    for i in range(len(algorithm_list)):
+        algo_name = algorithm_list[i].__class__.__name__
+        if hasattr(algorithm_list[i], "imprv"):
+                if algorithm_list[i].imprv:
+                    algo_name += "-L"
+        name = f"{algo_name}, T_max = {environment_list[i].T_max}"
+        result_dict[name] = [results[j][i] for j in range(len(results))]
+        if save:
+            dir = f"experiment_results/"
+            if not os.path.exists(dir):
+                  os.makedirs(dir)
+            np.save(arr = result_dict, file=f"{dir}S_{algorithm_list[0].nS}")
+    return result_dict
+
+def mean_regret_from_dict(result_dict, g_star):
+    mean_regret_dict = {}
+    T = result_dict[next(iter(result_dict))][0][0].shape[0] #Timehorizon
+    n_reps = len(result_dict[next(iter(result_dict))]) # number of repetions
+
+    for experiment in result_dict.keys():
+        reg_matrix = np.empty((T,n_reps))
+        for i in range(n_reps):
+            reg_matrix[:,i] = calc_regret(reward = result_dict[experiment][i][0], tau = result_dict[experiment][i][1], optimal_gain=g_star)
+        mean_regret_dict[experiment] = np.mean(reg_matrix, axis = 1)
+
+    return mean_regret_dict
+def plot_mean_regret_from_dict(dict, nS):
+    for key, value in dict.items():
+        plt.plot(value, label = key)
+    plt.legend()
+    plt.xlabel("T")
+    plt.ylabel("Cummulative regret")
+    plt.grid()
+    plt.title(f"{nS} states")
 # An implementation of the Value Iteration algorithm for a given environment 'env' in an average reward setting.
 # An arbitrary 'max_iter' is a maximum number of iteration, usefull to catch any error in your code!
 # Return the number of iterations, the final value, the optimal policy and the gain.
@@ -65,7 +201,7 @@ def VI(env, max_iter = 10**3, epsilon = 10**(-2)):
 		niter += 1
 		for s in range(env.nS):
 			for a in range(env.nA):
-				temp = env.R[s, a] + sum([V * p for (V, p) in zip(V0, env.P_eq[s, a])]) # Note Peq instead of P
+				temp = env.R[s, a] + sum([V * p for (V, p) in zip(V0, env.P[s, a])]) # Note Peq instead of P
 				if (a == 0) or (temp > V1[s]):
 					V1[s] = temp
 					policy[s] = a
@@ -114,7 +250,3 @@ def QL_SMDP(env,T):
             policy = np.argmax(Q0,axis = 1)
     return policy,Q0
 
-
-	
-	
-	

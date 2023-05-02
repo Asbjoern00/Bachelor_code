@@ -78,7 +78,7 @@ class riverswim():
                         delta = 1
                     else:
                         delta = 0
-                    self.P_eq[s,a,s_new] = 0.9/self.tau_bar[s,a] * (self.P[s,a,s_new] - delta) + delta
+                    self.P_eq[s,a,s_new] = 0.9/self.tau_bar[s,a] * (self.P_smdp[s,a,s_new] - delta) + delta
 
 # To reset the environment in initial settings.
     def reset(self):
