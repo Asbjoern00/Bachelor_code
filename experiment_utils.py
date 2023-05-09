@@ -201,7 +201,7 @@ def VI(env, max_iter = 10**3, epsilon = 10**(-2)):
 		niter += 1
 		for s in range(env.nS):
 			for a in range(env.nA):
-				temp = env.R[s, a] + sum([V * p for (V, p) in zip(V0, env.P[s, a])]) # Note Peq instead of P
+				temp = env.R_eq[s, a] + sum([V * p for (V, p) in zip(V0, env.P_eq[s, a])]) # Note Peq instead of P
 				if (a == 0) or (temp > V1[s]):
 					V1[s] = temp
 					policy[s] = a
