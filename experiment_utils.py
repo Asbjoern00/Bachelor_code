@@ -50,8 +50,8 @@ def run_experiment(environment, algorithm, T, write_to_csv = False):
             out = np.array([reward, tau]).T
             algo_name = algorithm.__class__.__name__
             if hasattr(algorithm, "imprv"):
-                  if algorithm.imprv:
-                        algo_name += "-L"
+                    mapper = {0: "", 1:"-L", 2:"-EB"} # 0 = no improvment, 1 = our improvement, 2 = Emma Brunskild
+                    algo_name += mapper[algorithm.imprv]
             dir = f"experiment_results/S_{environment.nS}"
             if not os.path.exists(dir):
                   os.makedirs(dir)
@@ -64,7 +64,7 @@ def calc_regret(reward, tau, optimal_gain):
     regret = T_n*optimal_gain - np.cumsum(reward)
     return regret
 
-def create_multiple_envs(nS_list,T_max_list ,base_env):
+def create_multiple_envs(nS_list,T_max_list ,base_env,reps, include_extra_mdp_env=True):
     """Functionality to create list of multiple instances of same base environment
 
     Parameters
@@ -81,7 +81,12 @@ def create_multiple_envs(nS_list,T_max_list ,base_env):
     lst
         list of environments
     """
-    return [base_env(nS = nS, T_max = T_max) for T_max,nS in zip(T_max_list, nS_list)]
+    env_list = [base_env(nS = nS, T_max = T_max) for T_max,nS in zip(T_max_list, nS_list)]
+    for i in range(reps-1):
+          env_list += env_list
+    if include_extra_mdp_env:
+          env_list = [base_env(nS_list[0], T_max = 1)] + env_list
+    return env_list
 
 def create_multiple_algos(base_algo, nS_list, T_max_list, **kwargs):
       """Functionality to create list of multiple instances of same base environment
@@ -126,7 +131,7 @@ def run_multiple_experiments(algorithm_list, environment_list, T, write_to_csv=F
         ls.append(run_experiment(environment, algorithm, T = T, write_to_csv=write_to_csv))
     return ls
 
-def run_multiple_experiments_n_reps(algorithm_list, environment_list, T, n_reps = 10, save=False):
+def run_multiple_experiments_n_reps(algorithm_list, environment_list, T, sub_dir, n_reps = 10, save=False):
     """Runs multiple experiments multiple times. Is essentially just a joblib wrapper
 
     Parameters
@@ -152,16 +157,25 @@ def run_multiple_experiments_n_reps(algorithm_list, environment_list, T, n_reps 
     for i in range(len(algorithm_list)):
         algo_name = algorithm_list[i].__class__.__name__
         if hasattr(algorithm_list[i], "imprv"):
-                if algorithm_list[i].imprv:
-                    algo_name += "-L"
-        name = f"{algo_name}, T_max = {environment_list[i].T_max}"
+                mapper = {0: "", 1:"-L", 2:"-EB"} # 0 = no improvment, 1 = our improvement, 2 = Emma Brunskild
+                algo_name += mapper[algorithm_list[i].imprv]
+        if hasattr(algorithm_list[i], "T_max_grid"):
+            name = f"{algo_name}, T_max_grid = {algorithm_list[i].T_max_grid}"
+        else:
+            name = f"{algo_name}, T_max = {algorithm_list[i].T_max}"
+        
         result_dict[name] = [results[j][i] for j in range(len(results))]
         if save:
-            dir = f"experiment_results/"
+            dir = f"experiment_results/{sub_dir}/"
             if not os.path.exists(dir):
                   os.makedirs(dir)
             np.save(arr = result_dict, file=f"{dir}S_{algorithm_list[0].nS}")
     return result_dict
+
+
+def read_results_dict(path):
+      results = np.load(path, allow_pickle=True).item()
+      return results 
 
 def mean_regret_from_dict(result_dict, g_star):
     mean_regret_dict = {}

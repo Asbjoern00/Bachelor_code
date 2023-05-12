@@ -1,6 +1,6 @@
 import numpy as np
 class UCRL_SMDP:
-    def __init__(self, nS, nA, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min=1,imprv=0, sigma_r=None, sigma_tau=None, tau_max=None, T_max = None):
+    def __init__(self, nS, nA, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min=1,imprv=0, sigma_r=None, sigma_tau=None, tau_max=None, T_max = None, **kwargs):
         
         #Assign attributes to instance
         self.nS = nS
@@ -275,7 +275,7 @@ class UCRL_SMDP:
             self.new_episode()
 
 class BUS(UCRL_SMDP):
-    def __init__(self, nS, nA, delta, b_r, sigma_r, b_tau, sigma_tau, r_max, tau_min, tau_max, T_max_grid,imprv):
+    def __init__(self, nS, nA, delta, b_r, sigma_r, b_tau, sigma_tau, r_max, tau_min, tau_max, T_max_grid,imprv, **kwargs):
         self.T_max_grid = T_max_grid
         self.loss_grid = np.zeros(len(T_max_grid)) # For sampling the algorithms
         self.current_sample_prop = np.ones(len(T_max_grid))/len(T_max_grid)
@@ -353,7 +353,7 @@ class BUS(UCRL_SMDP):
         self.policy = self.EVI()
 
 class BUS2():
-    def __init__(self, nS, nA ,T_max_grid, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min = 1,imprv=0):
+    def __init__(self, nS, nA ,T_max_grid, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min = 1,imprv=0, **kwargs):
         self.nS = nS
         self.nA = nA
         self.delta = delta
@@ -417,7 +417,7 @@ class BUS2():
     
 # BUS 3: IS A UCB1 INSPIRED ALGORITHM BASED ON THE AVERAGE REWARDS OF ALGORITHMS.
 class BUS3():
-    def __init__(self, nS, nA ,T_max_grid, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min = 1,imprv=0):
+    def __init__(self, nS, nA ,T_max_grid, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min = 1,imprv=0, **kwargs):
         self.nS = nS
         self.nA = nA
         self.delta = delta
