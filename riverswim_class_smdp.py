@@ -119,7 +119,7 @@ class riverswim():
             tau = 1
         reward = 0
         new_s = np.random.choice(np.arange(self.nS), p=self.P[self.s, action])
-        reward += self.R[self.s, action]/tau # get termination reward (i.e. split reward by holding time)
+        reward += self.R[self.s, action] # get termination reward
         self.s = new_s # set state
         return new_s, reward, tau
 

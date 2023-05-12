@@ -1,6 +1,6 @@
 import numpy as np
 class UCRL_SMDP:
-    def __init__(self, nS, nA, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min=1, sigma_r=None, sigma_tau=None, tau_max=None, T_max = None,imprv=False):
+    def __init__(self, nS, nA, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min=1,imprv=0, sigma_r=None, sigma_tau=None, tau_max=None, T_max = None):
         
         #Assign attributes to instance
         self.nS = nS
@@ -89,8 +89,10 @@ class UCRL_SMDP:
 
     def confidence(self):
         """Computes confidence intervals. See section *Confidence Intervals* in Fruit
+        Parameters: 
+         - imprv: Takes on values 0,1,2. These resemble different confidence sets. 
         """
-        if self.imprv == False:
+        if self.imprv == 0:
             for s in range(self.nS):
                 for a in range(self.nA):                                
                     n = max(1,self.Nk[s,a])
@@ -110,12 +112,26 @@ class UCRL_SMDP:
                         self.confR[s,a] = 14 * self.b_r *  ( np.log(2*self.nS*self.nA*self.i/self.delta) ) / (n)
         """Computes improvesconfidence intervals. See Sadegh's note
         """
-        if self.imprv == True: # improved confidence.
+        if self.imprv == 1: # improved confidence.
             for s in range(self.nS):
                 for a in range(self.nA):                                
                     n = max(1,self.Nk[s,a])
                     #Probability
                     self.confP[s,a] = np.sqrt( (2*(1+1/n) * np.log(np.sqrt(n+1)*self.nS*self.nA*(2**(self.nS)-2)/self.delta) ) / (n) )
+                    
+                    #Holding time
+                    self.conftau[s,a] = self.sigma_tau * np.sqrt( (2 * (1+1/n) *self.nS*self.nA* np.log(np.sqrt(n+1)/self.delta) ) / (n))
+
+                    #Rewards
+                    self.confR[s,a] = self.sigma_r * np.sqrt( (2 * (1+1/n) *self.nS*self.nA* np.log(np.sqrt(n+1)/self.delta) ) / (n))
+        """Computes improved confidence intervals. See Brunskill (Only P changes)
+        """
+        if self.imprv == 2: # improved confidence.
+            for s in range(self.nS):
+                for a in range(self.nA):                                
+                    n = max(1,self.Nk[s,a])
+                    #Probability
+                    self.confP[s,a] = np.sqrt( 4 * (2*np.log(np.log(np.max([n,np.exp(1)])))+np.log(3*(2**(self.nS)-2)/self.delta)) / (n) )
                     
                     #Holding time
                     self.conftau[s,a] = self.sigma_tau * np.sqrt( (2 * (1+1/n) *self.nS*self.nA* np.log(np.sqrt(n+1)/self.delta) ) / (n))
@@ -189,7 +205,7 @@ class UCRL_SMDP:
 
                     r_tilde[s,a] = min(self.hatR[s,a] + self.confR[s,a], self.r_max*self.tau_max)
                     
-                    tau_tilde[s,a] = min(self.tau_max, max(self.tau_min, self.hattau[s,a] - np.sign(r_tilde[s,a] +  self.tau*((maxp.T @ V0)-V0[s])*self.conftau[s,a])))
+                    tau_tilde[s,a] = min(self.tau_max, max(self.tau_min, self.hattau[s,a] - np.sign(r_tilde[s,a] +  self.tau*((maxp.T @ V0)-V0[s]))*self.conftau[s,a]))
                     
                     temp = r_tilde[s,a]/tau_tilde[s,a]+(self.tau/tau_tilde[s,a])*((maxp.T@V0) - V0[s])+V0[s]
                     if (a == 0) or ((temp + action_noise[a]) > (V1[s] + action_noise[self.policy[s]])): # Using a noise to randomize the choice when equals.
@@ -263,14 +279,16 @@ class BUS(UCRL_SMDP):
         self.T_max_grid = T_max_grid
         self.loss_grid = np.zeros(len(T_max_grid)) # For sampling the algorithms
         self.current_sample_prop = np.ones(len(T_max_grid))/len(T_max_grid)
-        
-        super().__init__(nS, nA, delta, b_r, b_tau,r_max,tau_min, sigma_r, sigma_tau, tau_max,imprv)
+
+        super().__init__(nS, nA, delta, b_r, b_tau,r_max,tau_min,imprv, sigma_r, sigma_tau, tau_max)
+        self.delta = ((T_max_grid[0]-tau_min)/(T_max_grid[-1]-tau_min))**2 * delta # For confidence 0.05. 
+
         self.sample_parameters()
         self.update_parameters()
         
-    
+        
     def learning_rate(self):
-        return np.sqrt(np.log(len(self.T_max_grid))/(self.n_episodes*len(self.T_max_grid)))
+        return np.sqrt(np.log(len(self.T_max_grid))/(self.n_episodes*len(self.T_max_grid))) # See HA 4 OReL.
 
     def sample_prob(self):
         numerator = np.exp(-self.learning_rate()*(self.loss_grid-np.min(self.loss_grid)))
@@ -335,7 +353,7 @@ class BUS(UCRL_SMDP):
         self.policy = self.EVI()
 
 class BUS2():
-    def __init__(self, nS, nA ,T_max_grid, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min = 1,imprv=False):
+    def __init__(self, nS, nA ,T_max_grid, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min = 1,imprv=0):
         self.nS = nS
         self.nA = nA
         self.delta = delta
@@ -390,6 +408,76 @@ class BUS2():
         
 
         self.current_episode_loss += (self.r_max - reward) # add loss for current episode
+        self.current_episode_length = np.sum(self.current_algorithm.vk) # find length of episode
+        action, policy = self.current_algorithm.play(state, reward, tau) # play current algo
+
+        
+            
+        return action,policy
+    
+# BUS 3: IS A UCB1 INSPIRED ALGORITHM BASED ON THE AVERAGE REWARDS OF ALGORITHMS.
+class BUS3():
+    def __init__(self, nS, nA ,T_max_grid, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min = 1,imprv=0):
+        self.nS = nS
+        self.nA = nA
+        self.delta = delta
+        self.b_r = b_r
+        self.b_tau = b_tau
+        self.r_max = r_max
+        self.tau_min = tau_min
+        self.T_max_grid = T_max_grid
+        self.imprv = imprv
+
+        self.reward_grid = np.zeros(len(T_max_grid)) # sum of reward grid
+        self.tau_grid = np.zeros(len(T_max_grid)) # grid for summation of holding times.
+        self.Nk_bandit = np.zeros(len(T_max_grid)) # For bandit counts.
+        self.t_bandit = 0 # For total number of decision steps in bandit
+        self.mu = np.zeros(len(T_max_grid))
+
+        self.algorithms = [UCRL_SMDP(nS = self.nS, nA = self.nA, delta = self.delta, b_r = self.b_r, b_tau=self.b_tau, tau_min=self.tau_min, T_max=t,imprv=self.imprv)
+                            for t in T_max_grid]
+
+
+        self.ucb1()
+
+
+    # Use sample as updating rule
+    def ucb1(self):
+        self.current_episode_reward = 0 
+        if self.t_bandit<len(self.T_max_grid)-1:
+            self.current_T_max = self.T_max_grid[self.t_bandit]
+            self.current_T_max_index = np.where(self.current_T_max == self.T_max_grid)[0]
+            self.current_algorithm = self.algorithms[int(self.current_T_max_index)]
+        else:
+            self.current_T_max_index = np.argmax(self.mu + np.sqrt(3*np.log(self.t_bandit)/(2*self.Nk_bandit)))
+            self.current_algorithm = self.algorithms[int(self.current_T_max_index)]
+
+    def reset(self, s):
+        self.s = 0 
+
+        for i in range(len(self.T_max_grid)):
+            self.algorithms[i].reset()
+
+
+    def play(self, state, reward, tau):
+
+        if self.current_algorithm.episode_ended:
+            self.current_algorithm.episode_ended = False
+            state = self.current_algorithm.s # store the current state so can be transfered to the next sampled algo
+            self.ucb1() # do sampling
+            # Update counters
+            self.Nk_bandit[self.current_T_max_index] += 1# For bandit counts.
+            self.t_bandit += 1
+
+            self.current_algorithm.s = state # update state of current algo 
+            self.play(state, reward, tau) # play current algo
+        
+
+        self.current_episode_reward += reward # add loss for current episode
+        self.reward_grid[self.current_T_max_index] += reward # sum of reward grid
+        self.tau_grid[self.current_T_max_index] += tau # grid for summation of holding times.
+        self.mu[self.current_T_max_index] = self.reward_grid[self.current_T_max_index]/ self.tau_grid[self.current_T_max_index] # find mean
+
         self.current_episode_length = np.sum(self.current_algorithm.vk) # find length of episode
         action, policy = self.current_algorithm.play(state, reward, tau) # play current algo
 

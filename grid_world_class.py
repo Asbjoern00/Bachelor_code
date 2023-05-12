@@ -34,7 +34,6 @@ class grid_world():
 		self.tau = np.zeros((nS, 4, nS))
 		self.tau_bar = np.zeros((nS,4)) # expected holding time.
 		self.P_eq = np.zeros((nS,4,nS))
-
 		for s in range(nS):
 			# We need a notion of states between e.g. up and current state.
 			# Find number of time steps
@@ -161,6 +160,7 @@ class grid_world():
 		self.R = np.zeros((nS, 4))
 		for o in range(4):
 			self.R[nS - 1, o] = 1
+		self.R_eq = self.R
 
 		# We (arbitrarily) set the initial state in the top-left corner.
 		self.s = 0
