@@ -200,7 +200,7 @@ def plot_mean_regret_from_dict(dict, nS):
 # An implementation of the Value Iteration algorithm for a given environment 'env' in an average reward setting.
 # An arbitrary 'max_iter' is a maximum number of iteration, usefull to catch any error in your code!
 # Return the number of iterations, the final value, the optimal policy and the gain.
-def VI(env, max_iter = 10**3, epsilon = 10**(-2)):
+def VI(env, max_iter = 10**5, epsilon = 10**(-3)):
 
 	# The variable containing the optimal policy estimate at the current iteration.
 	policy = np.zeros(env.nS, dtype=int)
@@ -231,6 +231,108 @@ def VI(env, max_iter = 10**3, epsilon = 10**(-2)):
 		if niter > max_iter:
 			print("No convergence in VI after: ", max_iter, " steps!")
 			return niter, V0, policy, gain
+                
+
+# Policy iteration:
+def PI(env,max_iter = 10**3):
+
+	# Initialisation of the variables - i.e. step 1 in puterman. 
+    policy0 = np.random.randint(env.nA, size = env.nS)
+    policy1 = np.zeros(env.nS, dtype = int)
+
+    niter = 0
+
+	# The main loop of the PI algorithm.
+    while True:
+        niter += 1
+
+		# Policy evaluation step - step 2 - we choose s0=0.
+        P_pi = np.array([[env.P_eq[s, policy0[s], ss] for ss in range(env.nS)] for s in range(env.nS)])
+        R_pi = np.array([env.R_eq[s, policy0[s]] for s in range(env.nS)])
+        Q_s0 = np.eye(env.nS) -  P_pi 
+        Q_s0[:,0] = np.ones(env.nS) # Eval P - row s0 equal to 1's
+        w = np.linalg.inv(Q_s0) @ R_pi # By following (8.6.8)
+        gain = w[0] # according to page 379 in puterman
+        V0 = w 
+        V0[0] = 0 # note value plays role as bias.
+        V1 = np.zeros(env.nS)
+
+		# Updating the policy/ policy improvement.
+        for s in range(env.nS):
+            for a in range(env.nA):
+                temp = env.R_eq[s, a] + sum([V * p for (V, p) in zip(V0, env.P_eq[s, a])])
+                if (a == 0) or (temp > V1[s]):
+                    V1[s] = temp
+                    policy1[s] = a # (This is policy 8.6.2 in puterman)
+        # Step 4 in section 8.6 in puterman. 
+		# Testing if the policy changed or not.
+        test = True
+        for s in range(env.nS):
+            if policy0[s] != policy1[s] :
+                test = False
+                break
+        if test:
+            return niter,V0, policy1, gain # Note V0 corresponds to bias.
+        else:
+            policy0 = policy1
+            policy1 = np.zeros(env.nS, dtype=int)
+        if niter > max_iter:
+            print("No convergence in PI after: ", max_iter, " steps!")
+            return niter,V0, policy1, gain
+
+
+# Policy iteration SMDP
+def PI_SMDP(env,max_iter = 10**3):
+
+	# Initialisation of the variables - i.e. step 1 in puterman. 
+    policy0 = np.random.randint(env.nA, size = env.nS)
+    policy1 = np.zeros(env.nS, dtype = int)
+    niter = 0
+	# The main loop of the PI algorithm.
+    while True:
+        niter += 1
+
+		# Policy evaluation step - step 2 - we choose s0=0.
+        P_pi = np.array([[env.P_smdp[s, policy0[s], ss] for ss in range(env.nS)] for s in range(env.nS)])
+        R_pi = np.array([env.R_smdp[s, policy0[s]] for s in range(env.nS)])
+        tau_pi = np.array([env.tau_bar[s, policy0[s]] for s in range(env.nS)])
+        Q_s0 = np.eye(env.nS) -  P_pi 
+        Q_s0[:,0] = tau_pi #tau_pi # Eval P - row s0 equal to 1's in MDP, but Tau_bar in SMDP.
+        w = np.linalg.lstsq(Q_s0, R_pi,rcond = 10**(-120))[0]   # eq. (8.6.8) in puterman - for dealing with close to zero values.
+        gain = w[0] # deduced by page 574 in puterman (referenced equation (8.6.1)). Use s_0=0
+        V0 = w
+        V0[0] = 0 # note value plays role as bias - but for iterations gain needs to be there.
+
+
+        V1 = np.zeros(env.nS)
+
+
+		# Updating the policy/ policy improvement.
+        for s in range(env.nS):
+            for a in range(env.nA):
+                temp = env.R_smdp[s, a] - gain*env.tau_bar[s,a] + sum([V * p for (V, p) in zip(V0, env.P_smdp[s, a])])
+                if (a == 0) or (temp > V1[s]):
+                    V1[s] = temp
+                    policy1[s] = a # (This is policy 8.6.2 in puterman)
+        # Step 4 in section 8.6 in puterman. 
+		# Testing if the policy changed or not.
+        test = True
+        for s in range(env.nS):
+            if policy0[s] != policy1[s] :
+                test = False
+                break
+        if test:
+            return niter,V0, policy1, gain # Note V0 corresponds to bias.
+        else:
+            policy0 = policy1
+            policy1 = np.zeros(env.nS, dtype=int)
+        if niter > max_iter:
+            print("No convergence in PI after: ", max_iter, " steps!")
+            return niter,V0, policy1, gain
+
+
+
+# Section including Q-learning (not used)
 
 def alpha(t):
     return 2/((t)**(2/3)+1)

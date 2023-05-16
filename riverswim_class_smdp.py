@@ -22,7 +22,7 @@ class riverswim():
         self.nS = nS
         self.nA = 2 # two options.
         nS = self.nS
-        self.P = np.zeros((nS, 2, nS)) # Transition probabilities.
+        self.P = np.zeros((nS, 2, nS)) # Transition probabilities (smdp).
         self.P_eq = np.zeros((nS, 2, nS)) # Transition probabilities in equivalent MDP.
         
         self.T_max = T_max
@@ -78,6 +78,9 @@ class riverswim():
         if self.distribution == 'geometric':
             self.tau_bar[:,1] = np.full(nS,1/self.param) # mean geometric distribution.
 
+        # Find SMDP matrices. 
+        self.R_smdp = self.R
+        self.P_smdp = self.P # Transition happens with same probs. 
         # Calculate the equivalent MDP 
         self.R_eq = self.R/self.tau_bar
         for s in range(nS):
