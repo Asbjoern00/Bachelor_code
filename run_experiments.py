@@ -12,12 +12,12 @@ import gc
 
 def scenario_generator(nS):
     nS_grid = np.ones(nS)*nS
-    T_grid = [x+1 for x in range(0, nS+5, 2)]
+    T_grid = [x+1 for x in range(0, nS+5, round(nS/4))]
     nS_grid = nS_grid.tolist()
     return list(map(int, nS_grid)), list(map(int,T_grid))
 
 n_reps = 8
-T = 10**3
+T = 5*10**6
 
 S = 5
 nS_list, T_max_list = scenario_generator(nS=S)
@@ -39,10 +39,8 @@ gc.collect()
 
 S = 10
 nS_list, T_max_list = scenario_generator(nS=S)
+envs = utils.create_multiple_envs(nS_list, T_max_list, rs.riverswim, 2, include_extra_mdp_env=True)
 
-envs = utils.create_multiple_envs(nS_list, T_max_list, rs.riverswim)
-envs += envs
-envs += [envs[0]]
 algos = utils.create_multiple_algos(ucrlS.UCRL_SMDP, nS_list, T_max_list , nA = 2)
 algos += utils.create_multiple_algos(ucrlS.UCRL_SMDP, nS_list, T_max_list , nA = 2, imprv = True)
 algos += utils.create_multiple_algos(ucrl.UCRL2, [nS_list[0]], [T_max_list[0]] , nA = 2)
@@ -60,9 +58,7 @@ print("running 15")
 S = 15
 nS_list, T_max_list = scenario_generator(nS=S)
 
-envs = utils.create_multiple_envs(nS_list, T_max_list, rs.riverswim)
-envs += envs
-envs += [envs[0]]
+envs = utils.create_multiple_envs(nS_list, T_max_list, rs.riverswim, 2, include_extra_mdp_env=True)
 algos = utils.create_multiple_algos(ucrlS.UCRL_SMDP, nS_list, T_max_list , nA = 2)
 algos += utils.create_multiple_algos(ucrlS.UCRL_SMDP, nS_list, T_max_list , nA = 2, imprv = True)
 algos += utils.create_multiple_algos(ucrl.UCRL2, [nS_list[0]], [T_max_list[0]] , nA = 2)
@@ -78,9 +74,7 @@ print("running 20")
 S = 20
 nS_list, T_max_list = scenario_generator(nS=S)
 
-envs = utils.create_multiple_envs(nS_list, T_max_list, rs.riverswim)
-envs += envs
-envs += [envs[0]]
+envs = utils.create_multiple_envs(nS_list, T_max_list, rs.riverswim, 2, include_extra_mdp_env=True)
 algos = utils.create_multiple_algos(ucrlS.UCRL_SMDP, nS_list, T_max_list , nA = 2)
 algos += utils.create_multiple_algos(ucrlS.UCRL_SMDP, nS_list, T_max_list , nA = 2, imprv = True)
 algos += utils.create_multiple_algos(ucrl.UCRL2, [nS_list[0]], [T_max_list[0]] , nA = 2)
