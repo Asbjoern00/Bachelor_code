@@ -85,7 +85,7 @@ def create_multiple_envs(nS_list,T_max_list ,base_env,reps, include_extra_mdp_en
     for i in range(reps-1):
           env_list += env_list
     if include_extra_mdp_env:
-          env_list = [base_env(nS_list[0], T_max = 1)] + env_list
+          env_list += [base_env(nS_list[0], T_max = 1)]
     return env_list
 
 def create_multiple_algos(base_algo, nS_list, T_max_list, **kwargs):
@@ -131,7 +131,7 @@ def run_multiple_experiments(algorithm_list, environment_list, T, write_to_csv=F
         ls.append(run_experiment(environment, algorithm, T = T, write_to_csv=write_to_csv))
     return ls
 
-def run_multiple_experiments_n_reps(algorithm_list, environment_list, T, sub_dir, n_reps = 10, save=False):
+def run_multiple_experiments_n_reps(algorithm_list, environment_list, T, n_reps = 10, save=False, sub_dir=None):
     """Runs multiple experiments multiple times. Is essentially just a joblib wrapper
 
     Parameters
@@ -177,7 +177,7 @@ def read_results_dict(path):
       results = np.load(path, allow_pickle=True).item()
       return results 
 
-def mean_regret_from_dict(result_dict, g_star):
+def mean_regret_from_dict(result_dict, g_star, save=False, sub_dir=None,file_name=None):
     mean_regret_dict = {}
     T = result_dict[next(iter(result_dict))][0][0].shape[0] #Timehorizon
     n_reps = len(result_dict[next(iter(result_dict))]) # number of repetions
@@ -187,8 +187,15 @@ def mean_regret_from_dict(result_dict, g_star):
         for i in range(n_reps):
             reg_matrix[:,i] = calc_regret(reward = result_dict[experiment][i][0], tau = result_dict[experiment][i][1], optimal_gain=g_star)
         mean_regret_dict[experiment] = np.mean(reg_matrix, axis = 1)
-
+    
+    if save:
+        dir = f"experiment_results/{sub_dir}/"
+        if not os.path.exists(dir):
+            os.makedirs(dir)
+        np.save(arr=mean_regret_dict, file = f"{dir}{file_name}")
+        return 0
     return mean_regret_dict
+
 def plot_mean_regret_from_dict(dict, nS):
     for key, value in dict.items():
         plt.plot(value, label = key)
