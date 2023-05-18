@@ -25,6 +25,7 @@ class UCRL2_L:
 		self.n_episodes = 0 # added
 		self.t = 1  #added counter 
 		self.current_bias_estimate = np.zeros(self.nS) # for speed-up of EVI
+		self.T_max = T_max
 
 		# The "counter" variables:
 		self.Nk = np.zeros((self.nS, self.nA), dtype=int) # Number of occurences of (s, a) at the end of the last episode.

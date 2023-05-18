@@ -9,6 +9,7 @@ importlib.reload(ucrl)
 importlib.reload(utils)
 import matplotlib.pyplot as plt
 import gc
+import pandas as pd
 
 def scenario_generator(nS):
     nS_grid = np.ones(nS)*nS
@@ -17,7 +18,7 @@ def scenario_generator(nS):
     return list(map(int, nS_grid)), list(map(int,T_grid))
 
 n_reps = 8
-T = 5*10**1
+T = 5*10**6
 
 S = 5
 nS_list, T_max_list = scenario_generator(nS=S)
@@ -29,14 +30,7 @@ algos = utils.create_multiple_algos(ucrlS.UCRL_SMDP, nS_list, T_max_list , nA = 
 algos += utils.create_multiple_algos(ucrlS.UCRL_SMDP, nS_list, T_max_list , nA = 2, imprv = True)
 algos += utils.create_multiple_algos(ucrl.UCRL2, [nS_list[0]], [1] , nA = 2)
 
-for algo, env in zip(algos, envs):
-    print(algo.T_max, env.T_max)
-print("running 5")
-run = utils.run_multiple_experiments_n_reps(algos, envs, T, n_reps = n_reps)
-utils.mean_regret_from_dict(run, g_star=gstar, save=True, sub_dir="rs_ucrl_l", file_name = f"nS_{S}")
-print("5 done")
-
-del run
+utils.run_experiments_and_save(algos, envs, T, gstar, 8, "rs_ucrl_l", f"nS_{S}.pkl")
 gc.collect()
 
 S = 10
@@ -47,17 +41,11 @@ algos = utils.create_multiple_algos(ucrlS.UCRL_SMDP, nS_list, T_max_list , nA = 
 algos += utils.create_multiple_algos(ucrlS.UCRL_SMDP, nS_list, T_max_list , nA = 2, imprv = True)
 algos += utils.create_multiple_algos(ucrl.UCRL2, [nS_list[0]], [1] , nA = 2)
 
-print("running 10")
-_,_,_,gstar = utils.VI(envs[0],epsilon=10**(-5))
-run = utils.run_multiple_experiments_n_reps(algos, envs, T, n_reps = n_reps)
-utils.mean_regret_from_dict(run, g_star=gstar, save=True, sub_dir="rs_ucrl_l", file_name = f"nS_{S}")
-del run
+utils.run_experiments_and_save(algos, envs, T, gstar, 8, "rs_ucrl_l", f"nS_{S}.pkl")
 gc.collect()
 
-print("10 done")
-
-
 print("running 15")
+
 S = 15
 nS_list, T_max_list = scenario_generator(nS=S)
 
@@ -67,9 +55,8 @@ algos += utils.create_multiple_algos(ucrlS.UCRL_SMDP, nS_list, T_max_list , nA =
 algos += utils.create_multiple_algos(ucrl.UCRL2, [nS_list[0]], [1] , nA = 2)
 
 _,_,_,gstar = utils.VI(envs[0],epsilon=10**(-5))
-run = utils.run_multiple_experiments_n_reps(algos, envs, T, n_reps = n_reps)
-utils.mean_regret_from_dict(run, g_star=gstar, save=True, sub_dir="rs_ucrl_l", file_name = f"nS_{S}")
-del run
+
+utils.run_experiments_and_save(algos, envs, T, gstar, 8, "rs_ucrl_l", f"nS_{S}.pkl")
 gc.collect()
 
 print("15 done")
@@ -84,9 +71,7 @@ algos += utils.create_multiple_algos(ucrlS.UCRL_SMDP, nS_list, T_max_list , nA =
 algos += utils.create_multiple_algos(ucrl.UCRL2, [nS_list[0]], [1] , nA = 2)
 
 _,_,_,gstar = utils.VI(envs[0],epsilon=10**(-5))
-run = utils.run_multiple_experiments_n_reps(algos, envs, T, n_reps = n_reps)
-utils.mean_regret_from_dict(run, g_star=gstar, save=True, sub_dir="rs_ucrl_l", file_name = f"nS_{S}")
-print("20 done")
 
-del run
+
+utils.run_experiments_and_save(algos, envs, T, gstar, 8, "rs_ucrl_l", f"nS_{S}.pkl")
 gc.collect()

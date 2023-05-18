@@ -16,6 +16,8 @@ class UCRL_SMDP:
         self.T_max = T_max
         self.sigma_r = sigma_r
         self.imprv = imprv
+        if self.imprv == 1:
+            self.delta = 1/6*self.delta # need to readjust delta to make algorithms comparable. See proof of smdp-ucrl-l regret bound
         self.episode_ended = False
 
         if (self.tau_max is None) and (self.sigma_r is None) and (self.sigma_tau is None) and (self.T_max is not None):

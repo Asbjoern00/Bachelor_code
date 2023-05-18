@@ -3,6 +3,8 @@ import os
 from joblib import delayed, Parallel
 import tqdm
 import matplotlib.pyplot as plt
+import pandas as pd
+
 
 def run_experiment(environment, algorithm, T, write_to_csv = False):
     """Function to execute algorithm on environment for T timesteps in the natural process
@@ -173,11 +175,7 @@ def run_multiple_experiments_n_reps(algorithm_list, environment_list, T, n_reps 
     return result_dict
 
 
-def read_results_dict(path):
-      results = np.load(path, allow_pickle=True).item()
-      return results 
-
-def mean_regret_from_dict(result_dict, g_star, save=False, sub_dir=None,file_name=None):
+def mean_regret_from_dict(result_dict, g_star):
     mean_regret_dict = {}
     T = result_dict[next(iter(result_dict))][0][0].shape[0] #Timehorizon
     n_reps = len(result_dict[next(iter(result_dict))]) # number of repetions
@@ -187,18 +185,25 @@ def mean_regret_from_dict(result_dict, g_star, save=False, sub_dir=None,file_nam
         for i in range(n_reps):
             reg_matrix[:,i] = calc_regret(reward = result_dict[experiment][i][0], tau = result_dict[experiment][i][1], optimal_gain=g_star)
         mean_regret_dict[experiment] = np.mean(reg_matrix, axis = 1)
-    
-    if save:
-        dir = f"experiment_results/{sub_dir}/"
-        if not os.path.exists(dir):
-            os.makedirs(dir)
-        np.save(arr=mean_regret_dict, file = f"{dir}{file_name}")
-        return 0
     return mean_regret_dict
 
-def plot_mean_regret_from_dict(dict, nS):
-    for key, value in dict.items():
-        plt.plot(value, label = key)
+
+def save_dict_as_pd(dict, subdir, experiment_name):
+    df = pd.DataFrame.from_dict(dict)
+    dir = f"experiment_results/{subdir}/"
+    if not os.path.exists(dir):
+        os.makedirs(dir)
+    df.to_pickle(f"{dir}{experiment_name}")
+
+def run_experiments_and_save(algorithm_list, environment_list, T, g_star, n_reps, subdir, experiment_name):
+     run = run_multiple_experiments_n_reps(algorithm_list, environment_list, T, n_reps)
+     regrets = mean_regret_from_dict(run, g_star)
+     save_dict_as_pd(regrets, subdir, experiment_name)
+
+
+def plot_mean_regret_from_pd(df, nS):
+    for col in df.columns:
+        plt.plot(df[col].values, label = col)
     plt.legend()
     plt.xlabel("T")
     plt.ylabel("Cummulative regret")
