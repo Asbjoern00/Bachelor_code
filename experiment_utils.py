@@ -4,7 +4,7 @@ from joblib import delayed, Parallel
 import tqdm
 import matplotlib.pyplot as plt
 import pandas as pd
-
+import gc
 
 def run_experiment(environment, algorithm, T, write_to_csv = False):
     """Function to execute algorithm on environment for T timesteps in the natural process
@@ -167,6 +167,9 @@ def run_multiple_experiments_n_reps(algorithm_list, environment_list, T, n_reps 
             name = f"{algo_name}, T_max = {algorithm_list[i].T_max}"
         
         result_dict[name] = [results[j][i] for j in range(len(results))]
+        for j in range(len(results)):
+             results[j][i] = None # For clearing out memory
+             gc.collect()
         if save:
             dir = f"experiment_results/{sub_dir}/"
             if not os.path.exists(dir):
