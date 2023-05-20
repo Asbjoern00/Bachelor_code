@@ -18,7 +18,7 @@ class riverswim():
 
     """
 	
-    def __init__(self, nS,T_max,distribution, param):
+    def __init__(self, nS,T_max,distribution, param=None):
         self.nS = nS
         self.nA = 2 # two options.
         nS = self.nS
