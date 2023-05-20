@@ -28,8 +28,8 @@ class riverswim():
         self.T_max = T_max
         
         self.tau = np.full((nS, 2, self.T_max), 1/self.T_max) # Holding times. For now assumed uniform
-        self.tau[:,0,:] = 0
-        self.tau[:,0,0] = 1 
+        #self.tau[:,0,:] = 0
+        #self.tau[:,0,0] = 1 
  
         
         self.beta = np.full(nS,1/nS) # uniform termination prob. 

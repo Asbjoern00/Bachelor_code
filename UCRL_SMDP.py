@@ -22,7 +22,7 @@ class UCRL_SMDP:
 
         if (self.tau_max is None) and (self.sigma_r is None) and (self.sigma_tau is None) and (self.T_max is not None):
             self.tau_max = self.T_max
-            self.sigma_tau = max(1,(self.T_max-1)/2) # Assuming bounded holding and a minimum holding time of 1   
+            self.sigma_tau = (self.T_max-1)/2 # Assuming bounded holding and a minimum holding time of 1 
             self.sigma_r = self.r_max*self.tau_max/2 # Assuming bounded holding and a minimum holding time of 1 
 
         
@@ -122,10 +122,10 @@ class UCRL_SMDP:
                     self.confP[s,a] = np.sqrt( (2*(1+1/n) * np.log(np.sqrt(n+1)*self.nS*self.nA*(2**(self.nS)-2)/self.delta) ) / (n) )
                     
                     #Holding time
-                    self.conftau[s,a] = self.sigma_tau * np.sqrt( (2 * (1+1/n) *self.nS*self.nA* np.log(np.sqrt(n+1)/self.delta) ) / (n))
+                    self.conftau[s,a] = self.sigma_tau * np.sqrt( (2 * (1+1/n) * np.log(self.nS*self.nA*np.sqrt(n+1)/self.delta) ) / (n))
 
                     #Rewards
-                    self.confR[s,a] = self.sigma_r * np.sqrt( (2 * (1+1/n) *self.nS*self.nA* np.log(np.sqrt(n+1)/self.delta) ) / (n))
+                    self.confR[s,a] = self.sigma_r * np.sqrt( (2 * (1+1/n) * np.log(self.nS*self.nA*np.sqrt(n+1)/self.delta) ) / (n))
         """Computes improved confidence intervals. See Brunskill (Only P changes)
         """
         if self.imprv == 2: # improved confidence.

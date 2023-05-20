@@ -29,6 +29,7 @@ def run_experiment(environment, algorithm, T, write_to_csv = False):
     #initialize
     reward = np.zeros(T)
     tau = np.zeros(T)
+    states, actions = np.full(T,-1), np.full(T,-1)
     # Reset environment and algo 
     environment.reset()
     s = environment.s
@@ -42,6 +43,8 @@ def run_experiment(environment, algorithm, T, write_to_csv = False):
     while t < T:
         action, _  = algorithm.play(new_s, reward[t_prev], tau[t_prev])
         new_s, reward[t] , tau[t]  = environment.step(action)
+        actions[t] = action
+        states[t] = new_s
         t_prev = int(t)
         t += tau[t]
         t = int(t)
@@ -59,14 +62,14 @@ def run_experiment(environment, algorithm, T, write_to_csv = False):
                   os.makedirs(dir)
             np.save(file = f"{dir}/{algo_name}_T_max_{environment.T_max}", arr = out)
     
-    return reward,tau
+    return reward,tau, actions, states
 
 def calc_regret(reward, tau, optimal_gain):
     T_n = np.cumsum(tau)
     regret = T_n*optimal_gain - np.cumsum(reward)
     return regret
 
-def create_multiple_envs(nS_list,T_max_list ,base_env,reps, include_extra_mdp_env=True):
+def create_multiple_envs(nS_list,T_max_list ,base_env,reps, include_extra_mdp_env=True, **kwargs):
     """Functionality to create list of multiple instances of same base environment
 
     Parameters
@@ -83,7 +86,7 @@ def create_multiple_envs(nS_list,T_max_list ,base_env,reps, include_extra_mdp_en
     lst
         list of environments
     """
-    env_list = [base_env(nS = nS, T_max = T_max) for T_max,nS in zip(T_max_list, nS_list)]
+    env_list = [base_env(nS = nS, T_max = T_max, **kwargs) for T_max,nS in zip(T_max_list, nS_list)]
     for i in range(reps-1):
           env_list += env_list
     if include_extra_mdp_env:
@@ -134,7 +137,7 @@ def run_multiple_experiments(algorithm_list, environment_list, T, write_to_csv=F
     return ls
 
 def run_multiple_experiments_n_reps(algorithm_list, environment_list, T, n_reps = 10, save=False, sub_dir=None):
-    """Runs multiple experiments multiple times. Is essentially just a joblib wrapper
+    """Runs multiple experiments multiple times. Is essentially just a joblib wrapper. Note that the same T_max overrides g_star, so provide max 1 env per T_max
 
     Parameters
     ----------
@@ -156,6 +159,7 @@ def run_multiple_experiments_n_reps(algorithm_list, environment_list, T, n_reps 
     """
     results = Parallel(n_jobs=-1)(delayed(run_multiple_experiments)(algorithm_list, environment_list, T) for i in tqdm.tqdm(range(n_reps)))
     result_dict = {}
+    gstar_dict = {}
     for i in range(len(algorithm_list)):
         algo_name = algorithm_list[i].__class__.__name__
         if hasattr(algorithm_list[i], "imprv"):
@@ -167,6 +171,8 @@ def run_multiple_experiments_n_reps(algorithm_list, environment_list, T, n_reps 
             name = f"{algo_name}, T_max = {algorithm_list[i].T_max}"
         
         result_dict[name] = [results[j][i] for j in range(len(results))]
+        _,_,_,g_star = VI(environment_list[i], epsilon=10**(-5))
+        gstar_dict[name] = g_star
         for j in range(len(results)):
              results[j][i] = None # For clearing out memory
              gc.collect()
@@ -175,10 +181,10 @@ def run_multiple_experiments_n_reps(algorithm_list, environment_list, T, n_reps 
             if not os.path.exists(dir):
                   os.makedirs(dir)
             np.save(arr = result_dict, file=f"{dir}S_{algorithm_list[0].nS}")
-    return result_dict
+    return result_dict,gstar_dict
 
 
-def mean_regret_from_dict(result_dict, g_star):
+def mean_regret_from_dict(result_dict, g_star_dict):
     mean_regret_dict = {}
     T = result_dict[next(iter(result_dict))][0][0].shape[0] #Timehorizon
     n_reps = len(result_dict[next(iter(result_dict))]) # number of repetions
@@ -186,7 +192,7 @@ def mean_regret_from_dict(result_dict, g_star):
     for experiment in result_dict.keys():
         reg_matrix = np.empty((T,n_reps))
         for i in range(n_reps):
-            reg_matrix[:,i] = calc_regret(reward = result_dict[experiment][i][0], tau = result_dict[experiment][i][1], optimal_gain=g_star)
+            reg_matrix[:,i] = calc_regret(reward = result_dict[experiment][i][0], tau = result_dict[experiment][i][1], optimal_gain=g_star_dict[experiment])
         mean_regret_dict[experiment] = np.mean(reg_matrix, axis = 1)
     return mean_regret_dict
 
@@ -198,8 +204,8 @@ def save_dict_as_pd(dict, subdir, experiment_name):
         os.makedirs(dir)
     df.to_pickle(f"{dir}{experiment_name}")
 
-def run_experiments_and_save(algorithm_list, environment_list, T, g_star, n_reps, subdir, experiment_name):
-     run = run_multiple_experiments_n_reps(algorithm_list, environment_list, T, n_reps)
+def run_experiments_and_save(algorithm_list, environment_list, T, n_reps, subdir, experiment_name):
+     run,g_star = run_multiple_experiments_n_reps(algorithm_list, environment_list, T, n_reps)
      regrets = mean_regret_from_dict(run, g_star)
      save_dict_as_pd(regrets, subdir, experiment_name)
 

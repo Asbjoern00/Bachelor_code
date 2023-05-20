@@ -20,7 +20,7 @@ class UCRL2_L:
 	def __init__(self, nS, nA, delta = 0.05, T_max = None):
 		self.nS = nS
 		self.nA = nA
-		self.delta = delta / (2* nS * nA)# As used in proof of lemma 5 in the original paper.
+		self.delta = delta / (2* nS * nA)# As used in proof of lemma 5 in the original paper. 
 		self.s = None
 		self.n_episodes = 0 # added
 		self.t = 1  #added counter 
@@ -188,9 +188,9 @@ class UCRL2_L:
 
 class UCRL2(UCRL2_L):
 	def confidence(self):
-		d = self.delta
+		d = 1/4 * self.delta #times 1/4 for making comparible with other algs
 		for s in range(self.nS):
 			for a in range(self.nA):
 				n = max(1, self.Nk[s, a])
-				self.confR[s, a] = np.sqrt((3.5/n) * np.log(2 * self.nS * self.nA * self.t / d))
+				self.confR[s, a] = np.sqrt((3.5/n) * np.log(2 * self.t / d))
 				self.confP[s, a] = np.sqrt((14 * self.nS/n * np.log(2*self.nA*self.t/d)))
