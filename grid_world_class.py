@@ -97,7 +97,7 @@ class grid_world():
 			self.P_eq[s,o,s] = (1-0.1)/(self.tau_bar[s,o])*(self.P[s,o,s]-1)+1
 
 
-			# option 2: down.		
+			# option 2: down		
 			o = 2
 			if m_down>T_max: # further away than maximum.
 				self.P[s, o, down[:T_max]] = 1/(T_max) # use T_max in this case - ommit -1 - T_max elements.
