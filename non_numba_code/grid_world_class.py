@@ -45,10 +45,10 @@ class grid_world():
 			up = np.flip(map[1:row_index,col_index]) # necessary to flip this (later index)
 			left = np.flip(map[row_index,1:col_index]) # necessary to flip this
 			# length to wall (subtract one to get actual number of states).
-			m_down = len(map[row_index+1:,col_index])
-			m_right = len(map[row_index,col_index+1:])
-			m_up = len(map[:row_index,col_index])
-			m_left = len(map[row_index,:col_index])
+			m_down = len(map[row_index+1:,col_index]) - 1
+			m_right = len(map[row_index,col_index+1:]) -1 
+			m_up = len(map[:row_index,col_index]) - 1
+			m_left = len(map[row_index,:col_index]) -1
 
 
 
@@ -60,13 +60,13 @@ class grid_world():
 				self.tau[s,o,up[:T_max]] = range(1,T_max+1) # tau
 				self.tau_bar[s,o]=(T_max + 1)/2
 
-			if m_up<=T_max and m_up>1: # closer than max number of steps.
-				self.P[s, o, up] = 1/(m_up-1) # as there is one state less avaivable - also ommit -1.  
-				self.tau[s,o,up] = range(1,m_up) # tau
+			if m_up<=T_max and m_up>0: # closer than max number of steps.
+				self.P[s, o, up] = 1/(m_up) # as there is one state less avaivable - also ommit -1.  
+				self.tau[s,o,up] = range(1,m_up+1) # tau
 			# find expected holding time for state option pair (see appendix F).
 				self.tau_bar[s,o]=(m_up + 1)/2
 			# define equivalent probabilities
-			if m_up == 1: # length one to wall (i.e. -1)
+			if m_up == 0: # length one to wall (i.e. -1)
 				self.P[s, o, s] = 1.0 # Still certain transition.
 				self.tau[s,o,s] = 1.0
 				self.tau_bar[s,o]=(1 + 1)/2
@@ -82,13 +82,13 @@ class grid_world():
 				self.tau[s,o,right[:T_max]] = range(1,T_max+1) # tau
 				self.tau_bar[s,o]=(T_max + 1)/2
 
-			if m_right<=T_max and m_right>1: # closer than max number of steps.
-				self.P[s, o, right] = 1/(m_right-1) # as there is one state less avaivable - also ommit -1.  
-				self.tau[s,o,right] = range(1,m_right) # tau
+			if m_right<=T_max and m_right>0: # closer than max number of steps.
+				self.P[s, o, right] = 1/(m_right) # as there is one state less avaivable - also ommit -1.  
+				self.tau[s,o,right] = range(1,m_right+1) # tau
 			# find expected holding time for state option pair (see appendix F).
 				self.tau_bar[s,o]=(m_right + 1)/2
 			# define equivalent probabilities
-			if m_right == 1: # length one to wall (i.e. -1)
+			if m_right == 0: # length one to wall (i.e. -1)
 				self.P[s, o, s] = 1.0 # Still certain transition.
 				self.tau[s,o,s] = 1.0
 				self.tau_bar[s,o]=(1 + 1)/2
@@ -97,20 +97,20 @@ class grid_world():
 			self.P_eq[s,o,s] = (1-0.1)/(self.tau_bar[s,o])*(self.P[s,o,s]-1)+1
 
 
-			# option 2: down.		
+			# option 2: down		
 			o = 2
 			if m_down>T_max: # further away than maximum.
 				self.P[s, o, down[:T_max]] = 1/(T_max) # use T_max in this case - ommit -1 - T_max elements.
 				self.tau[s,o,down[:T_max]] = range(1,T_max+1) # tau
 				self.tau_bar[s,o]=(T_max + 1)/2
 
-			if m_down<=T_max and m_down>1: # closer than max number of steps.
-				self.P[s, o, down] = 1/(m_down-1) # as there is one state less avaivable - also ommit -1.  
-				self.tau[s,o,down] = range(1,m_down) # tau
+			if m_down<=T_max and m_down>0: # closer than max number of steps.
+				self.P[s, o, down] = 1/(m_down) # as there is one state less avaivable - also ommit -1.  
+				self.tau[s,o,down] = range(1,m_down+1) # tau
 			# find expected holding time for state option pair (see appendix F).
 				self.tau_bar[s,o]=(m_down + 1)/2
 			# define equivalent probabilities
-			if m_down == 1: # length one to wall (i.e. -1)
+			if m_down == 0: # length one to wall (i.e. -1)
 				self.P[s, o, s] = 1.0 # Still certain transition.
 				self.tau[s,o,s] = 1.0
 				self.tau_bar[s,o]=(1 + 1)/2
@@ -126,13 +126,13 @@ class grid_world():
 				self.tau[s,o,left[:T_max]] = range(1,T_max+1) # tau
 				self.tau_bar[s,o]=(T_max + 1)/2
 
-			if m_left<=T_max and m_left>1: # closer than max number of steps.
-				self.P[s, o, left] = 1/(m_left-1) # as there is one state less avaivable - also ommit -1.  
-				self.tau[s,o,left] = range(1,m_left) # tau
+			if m_left<=T_max and m_left>0: # closer than max number of steps.
+				self.P[s, o, left] = 1/(m_left) # as there is one state less avaivable - also ommit -1.  
+				self.tau[s,o,left] = range(1,m_left+1) # tau
 			# find expected holding time for state option pair (see appendix F).
 				self.tau_bar[s,o]=(m_left + 1)/2
 			# define equivalent probabilities
-			if m_left == 1: # length one to wall (i.e. -1)
+			if m_left == 0: # length one to wall (i.e. -1)
 				self.P[s, o, s] = 1.0 # Still certain transition.					
 				self.tau[s,o,s] = 1.0
 				self.tau_bar[s,o]=(1 + 1)/2
@@ -160,7 +160,7 @@ class grid_world():
 		self.R = np.zeros((nS, 4))
 		for o in range(4):
 			self.R[nS - 1, o] = 1
-		self.R_eq = self.R
+		self.R_eq = self.R 
 
 		# We (arbitrarily) set the initial state in the top-left corner.
 		self.s = 0

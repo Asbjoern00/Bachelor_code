@@ -272,7 +272,7 @@ def PI(env,max_iter = 10**3):
         R_pi = np.array([env.R_eq[s, policy0[s]] for s in range(env.nS)])
         Q_s0 = np.eye(env.nS) -  P_pi 
         Q_s0[:,0] = np.ones(env.nS) # Eval P - row s0 equal to 1's
-        w = np.linalg.inv(Q_s0) @ R_pi # By following (8.6.8)
+        w = np.linalg.lstsq(Q_s0, R_pi,rcond = 10**(-120))[0]   # eq. (8.6.8) in puterman - for dealing with close to zero values.
         gain = w[0] # according to page 379 in puterman
         V0 = w 
         V0[0] = 0 # note value plays role as bias.
