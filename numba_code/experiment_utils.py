@@ -71,6 +71,7 @@ def run_experiment(environment, algorithm, T):
     #initialize
     reward = np.zeros(T, dtype=np.float64)
     tau = np.zeros(T, dtype=np.int64)
+    tau[0] = 1 # avoid div by zero in bus. first tau does not matter anyway
     # Reset environment and algo 
     environment.reset()
     s = environment.s
