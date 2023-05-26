@@ -175,7 +175,6 @@ def run_multiple_experiments_n_reps(algorithm_list, environment_list, n_reps, T)
     for algorithm, environment in zip(algorithm_list, environment_list):
         res = run_algo_n_times(environment, algorithm, T, n_reps)
         reg = calc_reg_from_ls(res)
-
         algo_name = algorithm.__class__.__name__
         if hasattr(algorithm, "imprv"):
                 mapper = {0: "", 1:"-L", 2:"-EB"} # 0 = no improvment, 1 = our improvement, 2 = Emma Brunskild
@@ -185,6 +184,8 @@ def run_multiple_experiments_n_reps(algorithm_list, environment_list, n_reps, T)
         else:
             name = f"{algo_name}, T_max = {int(algorithm.T_max)}"
         res_dict[name] = reg
+        print(algo_name)
+
     return res_dict
 
 

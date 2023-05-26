@@ -184,7 +184,7 @@ class UCRL2:
 		# Update the confidence intervals and policy.
 		self.confidence()
 		self.policy = self.EVI()
-		print(f"New episode started at {self.t}")
+		#print(f"New episode started at {self.t}")
 
 	# To reinitialize the model and a give the new initial state init.
 	def reset(self, init=0):
