@@ -284,7 +284,7 @@ class BUS(UCRL_SMDP):
 
         super().__init__(nS, nA, delta, b_r, b_tau,r_max,tau_min,imprv, sigma_r, sigma_tau, tau_max)
         self.delta = ((T_max_grid[0]-tau_min)/(T_max_grid[-1]-tau_min))**2 * delta # For confidence 0.05. 
-
+        self.current_episode_episode_length = 0
         self.sample_parameters()
         self.update_parameters()
         
@@ -293,7 +293,7 @@ class BUS(UCRL_SMDP):
         return np.sqrt(np.log(len(self.T_max_grid))/(self.n_episodes*len(self.T_max_grid))) # See HA 4 OReL.
 
     def sample_prob(self):
-        numerator = np.exp(-self.learning_rate()*(self.loss_grid-np.min(self.loss_grid)))
+        numerator = np.exp(self.learning_rate()*(self.loss_grid))
         self.numerator = numerator
         self.current_sample_prop = numerator/np.sum(numerator)
         return self.current_sample_prop
@@ -314,12 +314,13 @@ class BUS(UCRL_SMDP):
             self.Nsas[self.s, self.last_action, state] += 1
             self.Rsa[self.s, self.last_action] += reward
             self.tausa[self.s, self.last_action] += tau
+            self.current_episode_episode_length += tau
             sample_prob = self.sample_prob() # calculate new distribution
-            self.current_episode_loss += (self.r_max - reward)/(sample_prob[self.current_T_max_index]) # Added for compatibility w. BUS-like algos
+            self.current_episode_loss += reward/(sample_prob[self.current_T_max_index]) # Added for compatibility w. BUS-like algos
 
         action = self.policy[state]
         if self.vk[state, action] > max([1, self.Nk[state, action]]): # Stoppping criterion
-            self.loss_grid[self.current_T_max_index] += self.current_episode_loss/np.sum(self.vk) # Update loss with average importance weighted loss of the episode
+            self.loss_grid[self.current_T_max_index] += self.current_episode_loss/(np.sum(self.current_episode_episode_length)) # Update loss with average importance weighted loss of the episode
             self.new_episode()
             action  = self.policy[state]
 
@@ -337,7 +338,7 @@ class BUS(UCRL_SMDP):
         self.vk = np.zeros((self.nS, self.nA))
         self.current_episode_loss = 0
         self.n_episodes +=1 # add to episode counter
-
+        self.current_episode_episode_length = 0
         # Update estimates, note that the estimates are 0 at first, the optimistic strategy making that irrelevant.
         for s in range(self.nS):
             for a in range(self.nA):
@@ -416,10 +417,11 @@ class BUS2():
         
             
         return action,policy
-    
-# BUS 3: IS A UCB1 INSPIRED ALGORITHM BASED ON THE AVERAGE REWARDS OF ALGORITHMS.
+# Bus3 is a new version that should resemble the one in Simchi-Levi more. 
+
+
 class BUS3():
-    def __init__(self, nS, nA ,T_max_grid, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min = 1,imprv=0, **kwargs):
+    def __init__(self, nS, nA ,T_max_grid, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min = 1,imprv=0,H=100, **kwargs):
         self.nS = nS
         self.nA = nA
         self.delta = delta
@@ -429,33 +431,38 @@ class BUS3():
         self.tau_min = tau_min
         self.T_max_grid = T_max_grid
         self.imprv = imprv
-
-        self.reward_grid = np.zeros(len(T_max_grid)) # sum of reward grid
-        self.tau_grid = np.zeros(len(T_max_grid)) # grid for summation of holding times.
-        self.Nk_bandit = np.zeros(len(T_max_grid)) # For bandit counts.
-        self.t_bandit = 0 # For total number of decision steps in bandit
-        self.mu = np.zeros(len(T_max_grid))
-
+        self.reward_grid = np.zeros(len(T_max_grid)) # For sampling the algorithms
+        self.reward_zero_one = np.zeros(len(T_max_grid))
+        self.current_sample_prop = np.ones(len(T_max_grid))/len(T_max_grid)
+        self.partition = 1
+        self.H = H
         self.algorithms = [UCRL_SMDP(nS = self.nS, nA = self.nA, delta = self.delta, b_r = self.b_r, b_tau=self.b_tau, tau_min=self.tau_min, T_max=t,imprv=self.imprv)
                             for t in T_max_grid]
+        # Define Paramters as in EXP3.P (but anytime version)
+        self.eta = 0.95 * np.sqrt( np.log( len( self.T_max_grid ) ) / (self.partition * len( self.T_max_grid )))
+        self.beta = np.sqrt(np.log(len( self.T_max_grid )/ self.delta) / (self.partition * len( self.T_max_grid ))) # delta = 0.05 for now
+        self.gamma = 1.05 * np.sqrt(len( self.T_max_grid ) * np.log ( len( self.T_max_grid ) ) / self.partition) 
+        self.sample_parameters()
 
 
-        self.ucb1()
+    def learning_rate(self):
+        self.n_episodes = sum([self.algorithms[i].n_episodes for i in range(len(self.T_max_grid))])
+        return np.sqrt(np.log(len(self.T_max_grid))/(self.partition*len(self.T_max_grid)))
 
-
-    # Use sample as updating rule
-    def ucb1(self):
+    def sample_prob(self):
+        numerator = np.exp(self.eta*(self.reward_grid))
+        self.current_sample_prop = (1-self.gamma) * numerator/np.sum(numerator) + self.gamma / len(self.T_max_grid)
+    
+    def sample_parameters(self):
         self.current_episode_reward = 0 
-        if self.t_bandit<len(self.T_max_grid)-1:
-            self.current_T_max = self.T_max_grid[self.t_bandit]
-            self.current_T_max_index = np.where(self.current_T_max == self.T_max_grid)[0]
-            self.current_algorithm = self.algorithms[int(self.current_T_max_index)]
-        else:
-            self.current_T_max_index = np.argmax(self.mu + np.sqrt(3*np.log(self.t_bandit)/(2*self.Nk_bandit)))
-            self.current_algorithm = self.algorithms[int(self.current_T_max_index)]
-
+        self.current_T_max = np.random.choice(self.T_max_grid, size = 1, p = self.current_sample_prop)
+        self.current_T_max_index = np.where(self.current_T_max == self.T_max_grid)[0]
+        self.current_algorithm = self.algorithms[int(self.current_T_max_index)]
+    
     def reset(self, s):
         self.s = 0 
+        self.reward_grid = np.zeros(len(self.T_max_grid)) # For sampling the algorithms
+        self.current_sample_prop = np.ones(len(self.T_max_grid))/len(self.T_max_grid)
 
         for i in range(len(self.T_max_grid)):
             self.algorithms[i].reset()
@@ -466,23 +473,33 @@ class BUS3():
         if self.current_algorithm.episode_ended:
             self.current_algorithm.episode_ended = False
             state = self.current_algorithm.s # store the current state so can be transfered to the next sampled algo
-            self.ucb1() # do sampling
-            # Update counters
-            self.Nk_bandit[self.current_T_max_index] += 1# For bandit counts.
-            self.t_bandit += 1
+            self.current_algorithm.s = state # update state of current algo 
+            self.current_algorithm.play(state, reward, tau) # continue playing algo
+        
+        if  np.sum([self.algorithms[i].Nk for i in range(len(self.T_max_grid))])>self.partition*self.H: 
+            state = self.current_algorithm.s # store the current state so can be transfered to the next sampled algo
+            self.partition += 1
+            # Increment and update important factors. 
+            self.eta = 0.95 * np.sqrt( np.log( len( self.T_max_grid ) ) / (self.partition * len( self.T_max_grid )))
+            self.beta = np.sqrt(np.log(len( self.T_max_grid )/ self.delta) / (self.partition * len( self.T_max_grid ))) # delta = 0.05 for now
+            self.gamma = 1.05 * np.sqrt(len( self.T_max_grid ) * np.log ( len( self.T_max_grid ) ) / self.partition) 
+            self.reward_zero_one = np.zeros(len(self.T_max_grid)) # set all to zero. 
+            self.reward_zero_one[self.current_T_max_index] = self.current_episode_reward*1/self.H
 
+            self.reward_grid += (self.beta)/self.current_sample_prop[self.current_T_max_index]
+            self.reward_grid[self.current_T_max_index] += (self.current_episode_reward*1/self.H)/self.current_sample_prop[self.current_T_max_index]
+
+            self.sample_prob() # calculate new distribution
+            self.sample_parameters() # do sampling
             self.current_algorithm.s = state # update state of current algo 
             self.play(state, reward, tau) # play current algo
-        
 
-        self.current_episode_reward += reward # add loss for current episode
-        self.reward_grid[self.current_T_max_index] += reward # sum of reward grid
-        self.tau_grid[self.current_T_max_index] += tau # grid for summation of holding times.
-        self.mu[self.current_T_max_index] = self.reward_grid[self.current_T_max_index]/ self.tau_grid[self.current_T_max_index] # find mean
-
+        self.current_episode_reward +=  reward/(np.max(self.T_max_grid)*self.r_max) # Accumulated reward
         self.current_episode_length = np.sum(self.current_algorithm.vk) # find length of episode
         action, policy = self.current_algorithm.play(state, reward, tau) # play current algo
 
         
             
         return action,policy
+    
+
