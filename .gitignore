@@ -24,3 +24,10 @@ numba_code/plots/ucrl_smdp_ns_15.png
 numba_code/plots/ucrl_smdp_ns_20.png
 numba_code/plots/ucrl_smdp_ns_25.png
 numba_code/plots/ucrl_smdp_ns_50.png
+experiment_results/gw_ucrl_l/nS_100_correct_confidence.pkl
+numba_code/__pycache__/grid_world_class.cpython-310.pyc
+numba_code/__pycache__/UCRL_SMDP.cpython-310.pyc
+numba_code/__pycache__/UCRL2_L.cpython-310.pyc
+numba_code/__pycache__/experiment_utils.cpython-310.pyc
+ucrl_smdp_ns_100.png
+ucrl_smdp_l_ns_100.png

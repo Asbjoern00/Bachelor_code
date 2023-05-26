@@ -494,7 +494,7 @@ class BUS3():
             self.current_algorithm.s = state # update state of current algo 
             self.play(state, reward, tau) # play current algo
 
-        self.current_episode_reward +=  reward/(np.max(self.T_max_grid)*self.r_max) # Accumulated reward
+        self.current_episode_reward +=  reward/tau # Accumulated reward
         self.current_episode_length = np.sum(self.current_algorithm.vk) # find length of episode
         action, policy = self.current_algorithm.play(state, reward, tau) # play current algo
 

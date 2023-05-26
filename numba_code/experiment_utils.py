@@ -133,7 +133,7 @@ def create_multiple_envs(nS_list,T_max_list ,base_env,reps, include_extra_mdp_en
           env_list += [base_env(nS_list[0], T_max = 1)]
     return env_list
 
-def create_multiple_algos(base_algo, nS_list, T_max_list, **kwargs):
+def create_multiple_algos(base_algo, nS_list, T_max_list,bandit, **kwargs):
       """Functionality to create list of multiple instances of same base environment
 
     Parameters
@@ -150,6 +150,7 @@ def create_multiple_algos(base_algo, nS_list, T_max_list, **kwargs):
     lst
         list of algorithm
     """
+      
       return [base_algo(nS = nS, T_max = T_max, **kwargs) for T_max,nS in zip(T_max_list, nS_list)]
 
 def run_multiple_experiments_n_reps(algorithm_list, environment_list, n_reps, T):

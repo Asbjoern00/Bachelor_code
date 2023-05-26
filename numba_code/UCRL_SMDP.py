@@ -1,6 +1,8 @@
 import numpy as np
 from numba import int64, float64,boolean
 from numba.experimental import jitclass
+from numba import types, typed, typeof
+
 spec = [
 	('nS', int64),
 	('T_max', int64),
@@ -58,7 +60,7 @@ class UCRL_SMDP:
         self.imprv = imprv
         if self.imprv == 1:
             self.delta = 1/6*self.delta # need to readjust delta to make algorithms comparable. See proof of smdp-ucrl-l regret bound
-        #self.episode_ended = False
+        self.episode_ended = False
 
         if (self.tau_max < 0 ) and (self.sigma_r < 0) and (self.sigma_tau  < 0 ) and (self.T_max is not None):
             self.tau_max = self.T_max
@@ -291,7 +293,7 @@ class UCRL_SMDP:
 
         action = self.policy[state]
         if self.vk[state, action] > np.max(np.array([1, self.Nk[state, action]])): # Stoppping criterion
-            #self.episode_ended = True
+            self.episode_ended = True
             self.new_episode()
             action  = self.policy[state]
 
@@ -670,67 +672,150 @@ class BUS:
 
 
 
-"""
-class BUS2():
-    def __init__(self, nS, nA ,T_max_grid, delta=0.05, b_r=1, b_tau=1, r_max=1, tau_min = 1,imprv=0, **kwargs):
+spec = [
+	('nS', int64),
+	('T_max', int64),
+	('nA', int64),
+	('delta', float64),
+    ('r_max', float64),
+    ('tau_min', float64),
+    ('imprv', int64),
+    ('sigma_r', float64),
+	('sigma_tau', float64),
+    ('tau_max', float64),
+    ('current_T_max_index', int64),
+    ('current_T_max',int64),
+    ('play_times', int64[:]),
+    ('current_bias_estimate', float64[:]),
+    ('n_episodes',int64),
+    ('s', int64),
+	('tau', float64),
+    ('Nk',int64[:,:]),
+    ('Nsas', int64[:,:,:]),
+    ('Rsa',float64[:,:]),
+    ('vk', int64[:,:]),
+    ('tausa', float64[:,:]),
+    ('hatR', float64[:,:]),
+	('hatP', float64[:,:,:]),
+    ('hattau', float64[:,:]),
+    ('confR', float64[:,:]),
+	('confP', float64[:,:]),
+    ('conftau', float64[:,:]),
+    ('policy', int64[:]),
+    ('i', int64),
+    ('last_action', int64),
+    ('T_max_grid', int64[:]),
+    ('reward_grid', float64[:]),
+    ('reward_zero_one', float64[:]),
+    ('current_sample_prop', float64[:]),
+    ('current_episode_reward', float64),
+    ('current_algorithm',UCRL_SMDP.class_type.instance_type),
+    ('partition', int64),
+    ('H',int64),
+    ('algorithms',types.ListType(typeof(UCRL_SMDP(1,1)))), 
+    ('eta',float64),
+    ('beta',float64),
+    ('gamma',float64),
+    ('temp_sum',int64)
+    ]
+
+@jitclass(spec = spec)
+class BUS3:
+    def __init__(self, nS, nA , H ,delta,imprv,T_max_grid,algorithms):
+        self.algorithms = algorithms 
         self.nS = nS
         self.nA = nA
         self.delta = delta
-        self.b_r = b_r
-        self.b_tau = b_tau
-        self.r_max = r_max
-        self.tau_min = tau_min
-        self.T_max_grid = T_max_grid
         self.imprv = imprv
-        self.loss_grid = np.zeros(len(T_max_grid)) # For sampling the algorithms
-        self.current_sample_prop = np.ones(len(T_max_grid))/len(T_max_grid)
+        self.T_max_grid = T_max_grid
+        self.reward_grid = np.zeros(len(self.T_max_grid ),np.float64) # For sampling the algorithms
+        self.reward_zero_one = np.zeros(len(self.T_max_grid ),np.float64)
+        self.current_sample_prop = np.ones(len(self.T_max_grid ))/len(self.T_max_grid )
+        self.partition = 1
+        self.H = H
+        self.temp_sum = 0
         
-        self.algorithms = [UCRL_SMDP(nS = self.nS, nA = self.nA, delta = self.delta, b_r = self.b_r, b_tau=self.b_tau, tau_min=self.tau_min, T_max=t,imprv=self.imprv)
-                            for t in T_max_grid]
-        
+        # Define Paramters as in EXP3.P (but anytime version)
+        self.eta = 0.95 * np.sqrt( np.log( len( self.T_max_grid ) ) / (self.partition * len( self.T_max_grid )))
+        self.beta = np.sqrt(np.log(len( self.T_max_grid )/ self.delta) / (self.partition * len( self.T_max_grid ))) # delta = 0.05 for now
+        self.gamma = 1.05 * np.sqrt(len( self.T_max_grid ) * np.log ( len( self.T_max_grid ) ) / self.partition) 
         self.sample_parameters()
 
 
     def learning_rate(self):
         self.n_episodes = sum([self.algorithms[i].n_episodes for i in range(len(self.T_max_grid))])
-        return np.sqrt(np.log(len(self.T_max_grid))/(self.n_episodes*len(self.T_max_grid)))
+        return np.sqrt(np.log(len(self.T_max_grid))/(self.partition*len(self.T_max_grid)))
 
     def sample_prob(self):
-        numerator = np.exp(-self.learning_rate()*(self.loss_grid-np.min(self.loss_grid)))
-        self.current_sample_prop = numerator/np.sum(numerator)
+        numerator = np.exp(self.eta*(self.reward_grid))
+        self.current_sample_prop = (1-self.gamma) * numerator/np.sum(numerator) + self.gamma / len(self.T_max_grid)
     
+
     def sample_parameters(self):
-        self.current_episode_loss = 0 
-        self.current_T_max = np.random.choice(self.T_max_grid, size = 1, p = self.current_sample_prop)
+        self.current_episode_reward = 0 
+        self.current_T_max = self._rand_choice_nb(self.T_max_grid, self.current_sample_prop)
         self.current_T_max_index = np.where(self.current_T_max == self.T_max_grid)[0]
-        self.current_algorithm = self.algorithms[int(self.current_T_max_index)]
+        self.current_algorithm = self.algorithms[self.current_T_max_index]
     
     def reset(self, s):
-        self.s = 0 
-        self.loss_grid = np.zeros(len(self.T_max_grid)) # For sampling the algorithms
+        self.s = s 
+        self.reward_grid = np.zeros(len(self.T_max_grid)) # For sampling the algorithms
         self.current_sample_prop = np.ones(len(self.T_max_grid))/len(self.T_max_grid)
 
         for i in range(len(self.T_max_grid)):
-            self.algorithms[i].reset()
-
+            self.algorithms[i].reset(s)
+    
 
     def play(self, state, reward, tau):
+        self.temp_sum = 0
 
         if self.current_algorithm.episode_ended:
             self.current_algorithm.episode_ended = False
             state = self.current_algorithm.s # store the current state so can be transfered to the next sampled algo
-            self.loss_grid[self.current_T_max_index] += (self.current_episode_loss/self.current_sample_prop[self.current_T_max_index])*1/self.current_episode_length
+            self.current_algorithm.s = state # update state of current algo 
+            self.current_algorithm.play(state, reward, tau) # continue playing algo
+        
+        for i in range(len(self.T_max_grid)):
+            for j in range(self.nS):
+                for k in range(self.nA):
+                    self.temp_sum += self.algorithms[i].Nk[j,k]
+
+        if  self.temp_sum>self.partition*self.H: 
+            state = self.current_algorithm.s # store the current state so can be transfered to the next sampled algo
+            self.partition += 1
+            # Increment and update important factors. 
+            self.eta = 0.95 * np.sqrt( np.log( len( self.T_max_grid ) ) / (self.partition * len( self.T_max_grid )))
+            self.beta = np.sqrt(np.log(len( self.T_max_grid )/ self.delta) / (self.partition * len( self.T_max_grid ))) # delta = 0.05 for now
+            self.gamma = 1.05 * np.sqrt(len( self.T_max_grid ) * np.log ( len( self.T_max_grid ) ) / self.partition) 
+            self.reward_zero_one = np.zeros(len(self.T_max_grid)) # set all to zero. 
+            self.reward_zero_one[self.current_T_max_index] = self.current_episode_reward*1/self.H
+
+            self.reward_grid += (self.beta)/self.current_sample_prop[self.current_T_max_index]
+            self.reward_grid[self.current_T_max_index] += (self.current_episode_reward*1/self.H)/self.current_sample_prop[self.current_T_max_index]
+
             self.sample_prob() # calculate new distribution
             self.sample_parameters() # do sampling
             self.current_algorithm.s = state # update state of current algo 
-            self.play(state, reward, tau) # play current algo
-        
+            self.current_algorithm.play(state, reward, tau) # play current algo
 
-        self.current_episode_loss += (self.r_max - reward) # add loss for current episode
+        self.current_episode_reward +=  reward/tau # Accumulated reward
         self.current_episode_length = np.sum(self.current_algorithm.vk) # find length of episode
         action, policy = self.current_algorithm.play(state, reward, tau) # play current algo
 
         
             
         return action,policy
-"""
+    
+    def _rand_choice_nb(self, arr, prob):
+        return arr[np.searchsorted(np.cumsum(prob), np.random.random(), side="right")]
+
+
+def ucrl_smdp_wrapper(nS, nA, delta,imprv,T_max_grid):
+    ls = typed.List()
+    for t in T_max_grid:
+        ls.append(UCRL_SMDP(nS,nA,delta,imprv=imprv,T_max = t))
+    return ls
+
+def bus3_wrapper(nS, nA, delta,H,imprv, T_max_grid):
+    return BUS3(nS, nA , H ,delta,imprv,T_max_grid,algorithms = ucrl_smdp_wrapper(nS, nA, delta, imprv,T_max_grid))
+#bus3 = bus3_wrapper(nS = 10,nA=4, T_max_grid=np.array([1,2],np.int64),H=1000)
