@@ -1,3 +1,6 @@
+import sys
+sys.path.append('C:/Users/andre/Bachelor_code/numba_code')
+
 import numpy as np
 import riverswim_class as rs 
 import UCRL2_L as ucrl
@@ -19,6 +22,17 @@ def scenario_generator(nS):
 
 n_reps = 20
 T = 10**7
+
+# Test on SMDP-EXP3
+env = rs.riverswim(nS = 10, T_max = 5)
+smdp_exp3 = ucrlS.SMDP_EXP3(nS = 10, nA = 2, N = 10000, P = env.P_smdp)
+rew,tau = utils.run_experiment(env,smdp_exp3,T=T)
+smdp_exp3.history_matrix
+
+np.mean(rew)
+tau
+
+
 
 S = 5
 nS_list, T_max_list = scenario_generator(nS=S)

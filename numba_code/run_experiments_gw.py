@@ -16,9 +16,12 @@ import gc
 import pandas as pd
 
 
+n_reps = 3
+T = 5*10**7
 # Recall for grid world, it only makes sense to take T_max < d
 def scenario_generator(nS):
     nS_grid = np.ones(nS)*nS
+<<<<<<< HEAD
     T_grid = [x for x in range(2,9)]
     nS_grid = nS_grid.tolist()
     return list(map(int, nS_grid)), list(map(int,T_grid))
@@ -26,6 +29,14 @@ def scenario_generator(nS):
 n_reps = 10
 T = 10**7
 
+=======
+    T_grid = [x for x in range(2, 10, 2)]
+    nS_grid = nS_grid.tolist()
+    return list(map(int, nS_grid)), list(map(int,T_grid))
+
+
+
+>>>>>>> 326dd3b8307724b72ddaad6568260b7d5c9deadf
 # UCRLSMDP
 
 S = 10*10
@@ -51,6 +62,13 @@ print(f"done running {S}")
 
 gc.collect()
 
+# Recall for grid world, it only makes sense to take T_max < d
+def scenario_generator(nS):
+    nS_grid = np.ones(nS)*nS
+    T_grid = [x for x in range(2, 15, 3)]
+    nS_grid = nS_grid.tolist()
+    return list(map(int, nS_grid)), list(map(int,T_grid))
+
 
 S = 15*15
 nS_list, T_max_list = scenario_generator(nS=S)
@@ -73,6 +91,13 @@ utils.run_experiments_and_save(algos, envs, T, n_reps, "gw_ucrl_l", f"nS_{S}_cor
 print(f"done running {S}")
 
 gc.collect()
+
+# Recall for grid world, it only makes sense to take T_max < d
+def scenario_generator(nS):
+    nS_grid = np.ones(nS)*nS
+    T_grid = [x for x in range(2, 20, 5)]
+    nS_grid = nS_grid.tolist()
+    return list(map(int, nS_grid)), list(map(int,T_grid))
 
 
 S = 20*20
