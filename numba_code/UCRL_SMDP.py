@@ -804,3 +804,154 @@ def ucrl_smdp_wrapper(nS, nA, delta,imprv,T_max_grid):
 
 def bus3_wrapper(nS, nA, delta,H,imprv, T_max_grid):
     return BUS3(nS, nA , H ,delta,imprv,T_max_grid,algorithms = ucrl_smdp_wrapper(nS, nA, delta, imprv,T_max_grid))
+
+
+
+# The next algorithm is inspired by Neu et. al. (MDP-EXP3)
+spec = [
+	('nS', int64),
+	('T_max', int64),
+	('nA', int64),
+	('delta', float64),
+    ('s', int64),
+	('tau', float64),
+    ('policy', int64[:]),
+    ('i', int64), # decision steps
+    ('last_action', int64),
+    ('current_sample_prop', float64[:,:]),
+    ('action', int64),
+    ('current_reward', float64),
+    ('current_tau', int64),
+    ('action_grid',int64[:]),
+    ('eta',float64),
+    ('gamma',float64),
+    ('N', int64),
+    ('w', float64[:,:]),
+    ('mu', float64[:]),
+    ('mu_st', float64[:]),
+    ('history_matrix',float64[:,:,:]),
+    ('rhat', float64[:,:]),
+    ('tauhat', float64[:,:]),
+    ('qhat', float64[:,:]),
+    ('rhohat', float64[:,:]),
+    ('P', float64[:,:,:])
+    ]
+
+@jitclass(spec = spec)
+class SMDP_EXP3:
+    def __init__(self, nS, nA ,N,P):
+        self.nS = nS
+        self.nA = nA
+        self.current_sample_prop = np.ones((self.nA,self.nS),np.float64)/self.nA
+        self.N = N
+        self.i = 1
+        self.action_grid = np.arange(0,self.nA,dtype = np.int64)
+        self.mu = np.zeros(self.nS,np.float64)
+        self.mu_st = np.zeros(self.nS,np.float64)
+        self.P = P
+        self.history_matrix = np.zeros((self.N-1,self.nS,self.nS),np.float64)
+        self.rhat = np.zeros((self.nS,self.nA),np.float64)
+        self.tauhat = np.zeros((self.nS,self.nA),np.float64)
+        self.qhat  = np.zeros((self.nS,self.nA),np.float64)
+
+        # Define Paramters as in EXP3.P (but anytime version)
+        self.eta = 0.95 * np.sqrt(np.log(self.nA) / (self.i * self.nA))
+        self.gamma = 1.05 * np.sqrt(self.nA * np.log(self.nA) / self.i) 
+        self.w = np.ones((self.nA,self.nS),np.float64)
+
+
+
+
+    def sample_prob(self):
+        for a in range(self.nA):
+            for s in range(self.nS):
+                self.current_sample_prop[a,s] = (1-self.gamma) * self.w[a,s]/np.sum(self.w[:,s]) + self.gamma / self.nA
+
+    
+
+    def sample_parameters(self):
+        self.action = self._rand_choice_nb(self.action_grid, self.current_sample_prop[:,self.s])
+
+
+    def reset(self, s):
+        self.s = s 
+        self.current_sample_prop = np.ones((self.nA,self.nS),np.float64)
+
+
+    def play(self, state, reward, tau):
+        # 1) Playing for N decision steps.         
+        self.sample_prob()
+        self.sample_parameters() # Sample action. 
+
+        self.s = state # update state of current algo
+        self.current_reward = reward
+        self.current_tau = tau
+
+        
+        action = self.action
+        self.last_action = action
+        if self.i < self.N:
+            temp = np.zeros((self.nS,self.nS),np.float64)
+            for s in range(self.nS):
+                for sp in range(self.nS):
+                    temp[s,sp]  = self.current_sample_prop[:,s] @ self.P[s,:,sp]
+            self.history_matrix[self.i,:,:] = temp   
+
+
+        # 4) if i >= N.
+        if self.i >= self.N:
+            # 5) Compute mu
+            self.history_matrix[:self.N-1,:,:] = self.history_matrix[1:,:,:]
+            temp = np.zeros((self.nS,self.nS),np.float64)
+            # Compute history of P^pi
+            for s in range(self.nS):
+                for sp in range(self.nS):
+                    temp[s,sp]  = self.current_sample_prop[:,s] @ self.P[s,:,sp]
+            self.history_matrix[-1,:,:] = temp   
+
+            # Create matrix product of P^pi's
+            prod = self.history_matrix[0] @ np.identity(self.nS)
+            for i in range(1,self.N):
+                temp_prod = self.history_matrix[i] @ prod
+                prod = temp_prod 
+            # Compute mu
+            mu = np.ones(self.nS).T @ prod
+   
+            # 6) Compute r hat and tau hat. Compute q hat. 
+            self.rhat = np.zeros((self.nS,self.nA),np.float64)
+            self.tauhat = np.zeros((self.nS,self.nA),np.float64)
+            self.rhat[self.s,action] = reward /(self.current_sample_prop[action,self.s]*mu[self.s])
+            self.tauhat[self.s,action] = tau /(self.current_sample_prop[action,self.s]*mu[self.s])
+            # computation of qhat 
+            eneren = np.zeros(self.nS,np.float64)
+            eneren[0] = 1.0 
+            # Compute current P^pi
+            current_P = np.zeros((self.nS,self.nS),np.float64)
+            for s in range(self.nS):
+                for sp in range(self.nS):
+                    current_P[s,sp]  = self.current_sample_prop[:,s] @ self.P[s,:,sp]
+            # Compute stationary distribution. 
+            mu_st = eneren.T @ np.linalg.matrix_power(current_P, 50)
+            rhohat = np.zeros((self.nS,self.nA),np.float64)
+            for s in range(self.nS):
+                for a in range(self.nA):
+                    rhohat[s,a] = mu_st[s] * self.current_sample_prop[a,s] * self.rhat[s,a]
+            for a in range(self.nA):
+                self.qhat[:,a] =  ( self.rhat[:,a] - rhohat[:,a] * self.tauhat[:,a] ) @ np.linalg.inv(np.identity(self.nS) - self.P[:,a,:])
+
+            # 7) Update w. 
+            self.w = self.w * np.exp(self.eta*self.qhat)
+        self.i += 1
+        # we use a anytime version.
+        self.eta = 0.95 * np.sqrt(np.log(self.nA) / (self.i * self.nA))
+        self.gamma = 1.05 * np.sqrt(self.nA * np.log(self.nA) / self.i) 
+
+
+        policy = np.ones(self.nS) # arbitrary policy. 
+        return action, policy
+        
+    def _rand_choice_nb(self, arr, prob):
+        return arr[np.searchsorted(np.cumsum(prob), np.random.random(), side="right")]
+
+
+
