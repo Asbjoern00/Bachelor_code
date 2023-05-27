@@ -134,7 +134,7 @@ def create_multiple_envs(nS_list,T_max_list ,base_env,reps, include_extra_mdp_en
           env_list += [base_env(nS_list[0], T_max = 1)]
     return env_list
 
-def create_multiple_algos(base_algo, nS_list, T_max_list,bandit, **kwargs):
+def create_multiple_algos(base_algo, nS_list, T_max_list, **kwargs):
       """Functionality to create list of multiple instances of same base environment
 
     Parameters

@@ -2,11 +2,12 @@ import matplotlib.pyplot as plt
 import pandas as pd
 import experiment_utils as utils
 import gc
-path = 'C:/Users/andre/Bachelor_code/experiment_results/gw_ucrl_l'
+#path = 'C:/Users/andre/Bachelor_code/experiment_results/gw_ucrl_l'
 
-for ns in [10*10,20*20]:
 
-    df = pd.read_pickle(f"C:/Users/andre/Bachelor_code/experiment_results/gw_ucrl_l/nS_{ns}_correct_confidence.pkl")
+for ns in [10*10,15*15]:
+
+    df = pd.read_pickle(f"/experiment_results/gw_ucrl_l/nS_{ns}_correct_confidence.pkl")
     ucrl_smdp_l = df.loc[:, (df.columns.str.startswith('UCRL_SMDP-L')) | (df.columns.str.startswith('UCRL2-L'))]
     ucrl_smdp = df.loc[:, (df.columns.str.startswith('UCRL_SMDP')) & ~(df.columns.str.startswith('UCRL_SMDP-L')) |  ((df.columns.str.startswith('UCRL2'))&~(df.columns.str.startswith('UCRL2-L')))]
 
