@@ -1,14 +1,9 @@
 __pycache__/river_classes.cpython-39.pyc
 __pycache__/experiment_utils.cpython-39.pyc
 __pycache__/UCRL_SMDP.cpython-39.pyc
-numba_code/experiment_results/rs_smdp/nS_8_unif.pkl
-numba_code/experiment_results/rs_ucrl_l/nS_5_correct_confidence.pkl
-numba_code/experiment_results/rs_ucrl_l/nS_10_correct_confidence.pkl
-numba_code/experiment_results/rs_ucrl_l/nS_15_correct_confidence.pkl
-numba_code/experiment_results/rs_ucrl_l/nS_20_correct_confidence.pkl
-numba_code/experiment_results/rs_ucrl_l/nS_25_correct_confidence.pkl
-numba_code/experiment_results/rs_ucrl_l/nS_50_correct_confidence.pkl
-numba_code/experiment_results/rs_smdp/nS_8_bin.pkl
+__pycache__/
+numba_code/experiment_results/
+numba_code
 numba_code/plots/ratio_of_regrets10.png
 numba_code/plots/ratio_of_regrets15.png
 numba_code/plots/ratio_of_regrets20.png
@@ -35,3 +30,4 @@ ucrl_smdp_l_ns_225.png
 Ratio_of_regrets.png
 ucrl_smdp_ns_225.png
 experiment_results/gw_ucrl_l/nS_225_correct_confidence.pkl
+numba_code/plots/Riverswim_options/ucrl_smdp_l_ns_10.png

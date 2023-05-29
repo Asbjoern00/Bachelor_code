@@ -199,3 +199,4 @@ class grid_world:
 	
 	def _rand_choice_nb(self, arr, prob):
 		return arr[np.searchsorted(np.cumsum(prob), np.random.random(), side="right")]
+

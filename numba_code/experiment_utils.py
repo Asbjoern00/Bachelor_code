@@ -87,8 +87,73 @@ def run_experiment(environment, algorithm, T):
         new_s, reward[t] , tau[t]  = environment.step(action)
         t_prev = t
         t += tau[t]
-
     return reward,tau
+
+
+
+@njit(fastmath = True, parallel = True)
+def run_experiment_bus_concentration(environment, algorithm, T):
+    """Function to execute algorithm on environment for T timesteps in the natural process
+
+    Parameters
+    ----------
+    environment : instance of gridworld
+        The instance of gridworld (or potentially other environments) to run algorithm on
+    algorithm : Instance of UCRL-variant
+        The algorithm to run
+    T : int
+        Time horizon in the natural process
+    write_to_csv : bool
+        Whether to write to csv or not. If true will write to npy file in /results_experiment/S_{cardinality of S} formatedded as 'algorithm_T_max_{T_max}.npy'
+
+    Returns
+    -------
+    reward: np.array, tau: np.array
+        Returns np.array of rewards and holding times of length T
+    """
+
+    #initialize
+    reward = np.zeros(T, dtype=np.float64)
+    tau = np.zeros(T, dtype=np.int64)
+    tau[0] = 1 # avoid div by zero in bus. first tau does not matter anyway
+    # Reset environment and algo 
+    environment.reset()
+    s = environment.s
+    algorithm.reset(s)
+    new_s = environment.s
+
+    #init timesteps
+    t = 0
+    t_prev = np.int64(t)
+
+    while t < T:
+        action, _  = algorithm.play(new_s, reward[t_prev], tau[t_prev])
+        new_s, reward[t] , tau[t]  = environment.step(action)
+        t_prev = t
+        t += tau[t]
+    hist_probs = ffill_array(algorithm.hist_probs)
+    return hist_probs
+
+@njit(parallel = True)
+def ffill_array(hist_probs):
+    row,col = hist_probs.shape
+    mask = hist_probs == 0 
+    for i in range(1,row):
+        for j in range(col):
+            if mask[i][j]:
+                hist_probs[i][j] =hist_probs[i-1][j]
+    return hist_probs
+
+@njit(fastmath = True, parallel = True)
+def mean_hist_probs(env, algo, T, n_reps):
+    hist_prbs_agg = np.zeros((T,algo.n_algos))
+    for i in np.arange(n_reps):
+        hist_probs = run_experiment_bus_concentration(env, algo, T)
+        hist_probs = hist_probs[:T]
+        hist_prbs_agg += hist_probs
+    return hist_prbs_agg/n_reps
+
+
 
 @njit(fastmath = True)
 def calc_regret(reward, tau, optimal_gain):

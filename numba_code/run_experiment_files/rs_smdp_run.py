@@ -27,3 +27,19 @@ algos = algos_ucrl + algos_ucrl_l
 
 utils.run_experiments_and_save(algos, binomial_envs, T = T, n_reps=20, subdir="rs_smdp", experiment_name=f"nS_{S}_bin.pkl")
 utils.run_experiments_and_save(algos, unif_envs, T = T, n_reps=20, subdir="rs_smdp", experiment_name=f"nS_{S}_unif.pkl")
+
+
+
+
+algo = ucrlS.UCRL_SMDP(8, 2, T_max=32)
+env = rs.riverswim(nS = 8, T_max=4, distribution=1)
+reg = utils.run_algo_n_times(env, algo, T = 5*10**7, n_reps=10)
+reg_agg = utils.calc_reg_from_ls(reg)
+
+plt.close()
+plt.plot(reg_agg)
+plt.grid()
+plt.xlabel("T")
+plt.ylabel("Cummulative regret")
+plt.title("8 States")
+plt.savefig("8_state_T_bound")

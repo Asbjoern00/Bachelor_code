@@ -164,7 +164,7 @@ class UCRL2:
                       "current bias estimate =" , self.current_bias_estimate)
 				for s in range(self.nS):
 						policy[s] = np.argmax(r_tilde[s,:]+((mat_products[s,:])))
-						self.current_bias_estimate = V1 - np.mean(V1)
+						self.current_bias_estimate = (V1 - np.mean(V1))/(np.std(V1) + 1) # rescale to unit mean and (almost) unit variance
 				return policy
 
 	# To start a new episode (init var, computes estmates and run EVI).
