@@ -493,7 +493,7 @@ def bus3_wrapper(nS, nA, delta,H,imprv, T_max_grid):
 
 
 
-# The next algorithm is inspired by Neu et. al. (MDP-EXP3)
+    # The next algorithm is inspired by Neu et. al. (MDP-EXP3)
 spec = [
 	('nS', int64),
 	('T_max', int64),
@@ -511,16 +511,33 @@ spec = [
     ('action_grid',int64[:]),
     ('eta',float64),
     ('gamma',float64),
+    ('temp',float64[:,:]),
+    ('temp_prod',float64[:,:]),
     ('N', int64),
-    ('w', float64[:,:]),
     ('mu', float64[:]),
     ('mu_st', float64[:]),
     ('history_matrix',float64[:,:,:]),
+    ('history_matrix2',float64[:,:,:]),
+    ('history_action',int64[:]),
+    ('history_state',int64[:]),
+    ('eneren',float64[:]),
     ('rhat', float64[:,:]),
     ('tauhat', float64[:,:]),
     ('qhat', float64[:,:]),
-    ('rhohat', float64[:,:]),
-    ('P', float64[:,:,:])
+    ('qhatdiff', float64[:,:]),
+    ('rhohat', float64),
+    ('inv', float64[:,:,:]),
+    ('P', float64[:,:,:]),
+    ('current_P', float64[:,:]),
+    ('identity', float64[:,:,:]),
+    ('prod', float64[:,:]),
+    ('w', float64[:,:]),
+    ('w_ny', float64[:,:]),
+    ('diff', float64[:,:]),
+    ("a_hist", int64),
+    ("s_hist", int64),
+    ("mat_solve", float64[:,:]),
+    ("zero_one", float64[:])
     ]
 
 @jitclass(spec = spec)
@@ -528,112 +545,161 @@ class SMDP_EXP3:
     def __init__(self, nS, nA ,N,P):
         self.nS = nS
         self.nA = nA
-        self.current_sample_prop = np.zeros((self.nS, self.nA),np.float64)
+        self.current_sample_prop = np.ones((self.nA,self.nS),np.float64)/self.nA
         self.N = N
-        self.i = 1
+        self.i = 1 # for making formulas work.
         self.action_grid = np.arange(0,self.nA,dtype = np.int64)
-        self.mu = np.zeros(self.nS,np.float64)
-        self.mu_st = np.zeros(self.nS,np.float64)
+        self.mu = np.ones(self.nS,np.float64)
+        self.mu_st = np.ones(self.nS,np.float64)
         self.P = P
+        self.current_P = np.zeros((self.nS,self.nS),np.float64)
         self.history_matrix = np.zeros((self.N-1,self.nS,self.nS),np.float64)
+        self.history_action = np.zeros(self.N-1,np.int64)
+        self.history_state = np.zeros(self.N-1,np.int64)
+        self.a_hist = 0
+        self.s_hist = 0
+        self.history_matrix2 = np.zeros((self.N-1,self.nS,self.nS),np.float64)
         self.rhat = np.zeros((self.nS,self.nA),np.float64)
         self.tauhat = np.zeros((self.nS,self.nA),np.float64)
         self.qhat  = np.zeros((self.nS,self.nA),np.float64)
+        self.qhatdiff  = np.zeros((self.nS,self.nA),np.float64)
+
+        self.diff  = np.zeros((self.nS,self.nA),np.float64)
+        self.identity = np.zeros((self.nS,self.nA,self.nS), np.float64)
+        self.prod = np.zeros((self.nS,self.nS), np.float64)
+        self.inv = np.zeros((self.nS,self.nA,self.nS), np.float64)
 
         # Define Paramters as in EXP3.P (but anytime version)
         self.eta = 0.95 * np.sqrt(np.log(self.nA) / (self.i * self.nA))
         self.gamma = 1.05 * np.sqrt(self.nA * np.log(self.nA) / self.i) 
         self.w = np.ones((self.nA,self.nS),np.float64)
+        self.w_ny = np.ones((self.nA,self.nS),np.float64)
 
+        self.eneren = np.zeros(self.nS,np.float64)
+        self.mat_solve = np.ones((self.nS+1,self.nS),np.float64)
+        self.zero_one = np.zeros(self.nS+1, np.float64)
+        self.zero_one[self.nS] = 1.0
+        self.i = 0 # For zero indexing.
 
+    
 
 
     def sample_prob(self):
         for a in range(self.nA):
             for s in range(self.nS):
-                self.current_sample_prop[s,a] = (1-self.gamma) * self.w[s,a]/np.sum(self.w[s,:]) + self.gamma / self.nA
-
+                self.current_sample_prop[a,s] = (1-self.gamma) * self.w[a,s]/np.sum(self.w[:,s]) + self.gamma / self.nA
     
 
     def sample_parameters(self):
         self.action = self._rand_choice_nb(self.action_grid, self.current_sample_prop[:,self.s])
-
+        return self.action
 
     def reset(self, s):
         self.s = s 
-        self.current_sample_prop = np.ones((self.nA,self.nS),np.float64)
+        self.current_sample_prop = np.ones((self.nA,self.nS),np.float64)/self.nA
 
 
     def play(self, state, reward, tau):
-        # 1) Playing for N decision steps.         
-        self.sample_prob()
-        self.sample_parameters() # Sample action. 
 
+        # 1) Playing for N decision steps.         
+        action = self.sample_parameters() # Sample action. 
         self.s = state # update state of current algo
         self.current_reward = reward
         self.current_tau = tau
-
         
-        action = self.action
         self.last_action = action
-        if self.i < self.N:
-            temp = np.zeros((self.nS,self.nS),np.float64)
-            for s in range(self.nS):
-                for sp in range(self.nS):
-                    temp[s,sp]  = self.current_sample_prop[:,s] @ self.P[s,:,sp]
-            self.history_matrix[self.i,:,:] = temp   
-
+        # Generate history up till now. 
+        temp = np.zeros((self.nS,self.nS),np.float64)
+        for s in range(self.nS):
+            for sp in range(self.nS):
+                temp[s,sp]  = self.current_sample_prop[:,s] @ self.P[s,:,sp]
+        if self.i < self.N - 1 :
+            self.history_matrix2[self.i,:,:] = temp  # set as the same. 
+            self.history_action[self.i] = action
+            self.history_state[self.i] = self.s
 
         # 4) if i >= N.
-        if self.i >= self.N:
-            # 5) Compute mu
-            self.history_matrix[:self.N-1,:,:] = self.history_matrix[1:,:,:]
-            temp = np.zeros((self.nS,self.nS),np.float64)
-            # Compute history of P^pi
-            for s in range(self.nS):
-                for sp in range(self.nS):
-                    temp[s,sp]  = self.current_sample_prop[:,s] @ self.P[s,:,sp]
-            self.history_matrix[-1,:,:] = temp   
+        if self.i >= self.N - 1:
+        # 5) Compute mu
+            # Update current t-N history
+            self.a_hist = self.history_action[0] # first in line
+            self.s_hist = self.history_state[0] 
+            # History t-N up till t-1
+            for i in range(0,self.N-2):   
+                self.history_matrix[i,:,:] = self.history_matrix2[i+1,:,:]
 
+            # Compute history of P^pi of current t
+            self.history_matrix[self.N-2,:,:] = temp 
+            
             # Create matrix product of P^pi's
-            prod = self.history_matrix[0] @ np.identity(self.nS)
-            for i in range(1,self.N):
-                temp_prod = self.history_matrix[i] @ prod
-                prod = temp_prod 
+            self.prod =  np.identity(self.nS,np.float64)
+            for i in range(self.N-2,0,-1): # do not include newest.
+                temp_prod = self.history_matrix2[i,:,:] @ self.prod
+                self.prod = temp_prod 
             # Compute mu
-            mu = np.ones(self.nS).T @ prod
-   
+            self.eneren = np.zeros(self.nS,np.float64)
+            self.eneren[self.s_hist] = 1.0
+            self.mu = self.eneren @ self.P[:,self.a_hist,:] @ self.prod
+            # Update history matrix
+            self.history_matrix2 = self.history_matrix # update for next run.
+            # update history of actions and state
+            for i in range(0,self.N-2):   
+                self.history_action[i] = self.history_action[i+1]
+                self.history_state[i] = self.history_state[i+1]
+            self.history_action[self.N-2] = action
+            self.history_state[self.N-2] = self.s
+
             # 6) Compute r hat and tau hat. Compute q hat. 
             self.rhat = np.zeros((self.nS,self.nA),np.float64)
             self.tauhat = np.zeros((self.nS,self.nA),np.float64)
-            self.rhat[self.s,action] = reward /(self.current_sample_prop[action,self.s]*mu[self.s])
-            self.tauhat[self.s,action] = tau /(self.current_sample_prop[action,self.s]*mu[self.s])
-            # computation of qhat 
-            eneren = np.zeros(self.nS,np.float64)
-            eneren[0] = 1.0 
+            # Update weighted estimates.
+            self.rhat[self.s,action] = reward /(self.current_sample_prop[action,self.s]*self.mu[self.s]) #use tau to avoid overflow
+            self.tauhat[self.s,action] = tau /(self.current_sample_prop[action,self.s]*self.mu[self.s])
             # Compute current P^pi
-            current_P = np.zeros((self.nS,self.nS),np.float64)
+            self.current_P = np.zeros((self.nS,self.nS),np.float64)
             for s in range(self.nS):
                 for sp in range(self.nS):
-                    current_P[s,sp]  = self.current_sample_prop[:,s] @ self.P[s,:,sp]
-            # Compute stationary distribution. 
-            mu_st = eneren.T @ np.linalg.matrix_power(current_P, 50)
-            rhohat = np.zeros((self.nS,self.nA),np.float64)
+                    self.current_P[s,sp]  = self.current_sample_prop[:,s] @ self.P[s,:,sp]
+            # Calculate stationary distribution heuristically via matrix power.
+            #self.mu_st = self.eneren @ np.linalg.matrix_power(self.current_P, 50) 
+            # By least squares solver
+            self.mat_solve[:self.nS,:] = np.identity(self.nS,np.float64)-self.current_P            
+            self.mu_st = np.linalg.lstsq(self.mat_solve,self.zero_one,rcond = 10**(-120))[0]
+
+            
+            # Find rho by importance sampled estimates. 
+            self.rhohat = 0
             for s in range(self.nS):
                 for a in range(self.nA):
-                    rhohat[s,a] = mu_st[s] * self.current_sample_prop[a,s] * self.rhat[s,a]
-            for a in range(self.nA):
-                self.qhat[:,a] =  ( self.rhat[:,a] - rhohat[:,a] * self.tauhat[:,a] ) @ np.linalg.inv(np.identity(self.nS) - self.P[:,a,:])
+                    self.rhohat += self.mu_st[s] * self.current_sample_prop[a,s] * self.rhat[s,a]
+            # Calculate difference
+            self.diff = np.zeros((self.nS,self.nA),np.float64)
+            self.diff[self.s,action] = self.rhat[self.s,action] - self.rhohat * self.tauhat[self.s,action] 
 
-            # 7) Update w. 
-            self.w = self.w * np.exp(self.eta*self.qhat)
-        self.i += 1
-        # we use a anytime version.
+            for a in range(self.nA):
+                self.identity[:,a,:] = np.identity(self.nS)
+                self.inv[:,a,:] = self.identity[:,a,:] - self.P[:,a,:]
+                self.qhat[:,a] += np.linalg.lstsq(self.inv[:,a,:].T, self.diff[:,a],rcond = 10**(-120))[0] # increment
+            # The last step increments qhat. We then calculate relative diff (see footnote 6):
+            # i.e. For nummerical stable.
+            for s in range(self.nS):    
+                self.qhatdiff[s,:] = self.qhat[s,:] - np.max(self.qhat[s,:])*np.ones(self.nA,np.float64)
+            
+            # 7) Update w.
+            for s in range(self.nS): 
+                for a in range(self.nA):
+                    self.w_ny[a,s] = self.w[a,s] * np.exp(self.eta*( self.qhatdiff[s,a]))
+            self.w = self.w_ny
+
+        # Updates.
+        self.i = self.i + 1
         self.eta = 0.95 * np.sqrt(np.log(self.nA) / (self.i * self.nA))
         self.gamma = 1.05 * np.sqrt(self.nA * np.log(self.nA) / self.i) 
 
 
-        policy = np.ones(self.nS) # arbitrary policy. 
+        policy = np.array(self.nS, np.int64) 
+        self.sample_prob()
+
         return action, policy
         
     def _rand_choice_nb(self, arr, prob):

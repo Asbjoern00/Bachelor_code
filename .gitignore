@@ -3,3 +3,13 @@ numba_code/__pycache__/
 non_numba_code/__pycache__/
 numba_code/experiment_results/
 numba_code/plots/
+Ratio_of_regrets.png
+ucrl_smdp_l_ns_100.png
+ucrl_smdp_l_ns_400.png
+ucrl_smdp_ns_100.png
+ucrl_smdp_ns_400.png
+ucrl_smdp_ns_225.png
+ucrl_smdp_l_ns_225.png
+experiment_results/gw_ucrl_l/nS_100_correct_confidence.pkl
+experiment_results/gw_ucrl_l/nS_225_correct_confidence.pkl
+experiment_results/gw_ucrl_l/nS_400_correct_confidence.pkl
