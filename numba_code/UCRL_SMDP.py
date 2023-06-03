@@ -537,7 +537,10 @@ spec = [
     ("a_hist", int64),
     ("s_hist", int64),
     ("mat_solve", float64[:,:]),
-    ("zero_one", float64[:])
+    ("zero_one", float64[:]),
+    ("V", float64[:]),
+    ("V_temp", float64[:])
+
     ]
 
 @jitclass(spec = spec)
@@ -563,6 +566,8 @@ class SMDP_EXP3:
         self.tauhat = np.zeros((self.nS,self.nA),np.float64)
         self.qhat  = np.zeros((self.nS,self.nA),np.float64)
         self.qhatdiff  = np.zeros((self.nS,self.nA),np.float64)
+        self.V = np.zeros(self.nS,np.float64)
+        self.V_temp = np.zeros(self.nS,np.float64)
 
         self.diff  = np.zeros((self.nS,self.nA),np.float64)
         self.identity = np.zeros((self.nS,self.nA,self.nS), np.float64)
@@ -595,8 +600,43 @@ class SMDP_EXP3:
         return self.action
 
     def reset(self, s):
-        self.s = s 
+        self.s = s # set initial state to first state. 
         self.current_sample_prop = np.ones((self.nA,self.nS),np.float64)/self.nA
+        self.i = 1 # for making formulas work.
+        self.action_grid = np.arange(0,self.nA,dtype = np.int64)
+        self.mu = np.ones(self.nS,np.float64)
+        self.mu_st = np.ones(self.nS,np.float64)
+        self.current_P = np.zeros((self.nS,self.nS),np.float64)
+
+        self.history_matrix = np.zeros((self.N-1,self.nS,self.nS),np.float64)
+        self.history_action = np.zeros(self.N-1,np.int64)
+        self.history_state = np.zeros(self.N-1,np.int64)
+        self.a_hist = 0 # for transitioning
+        self.s_hist = s # for transitioning
+        self.history_matrix2 = np.zeros((self.N-1,self.nS,self.nS),np.float64)
+        self.rhat = np.zeros((self.nS,self.nA),np.float64)
+        self.tauhat = np.zeros((self.nS,self.nA),np.float64)
+        self.qhat  = np.zeros((self.nS,self.nA),np.float64)
+        self.qhatdiff  = np.zeros((self.nS,self.nA),np.float64)
+        self.V = np.zeros(self.nS,np.float64)
+        self.V_temp = np.zeros(self.nS,np.float64)
+
+        self.diff  = np.zeros((self.nS,self.nA),np.float64)
+        self.identity = np.zeros((self.nS,self.nA,self.nS), np.float64)
+        self.prod = np.zeros((self.nS,self.nS), np.float64)
+        self.inv = np.zeros((self.nS,self.nA,self.nS), np.float64)
+
+        # Define Paramters as in EXP3.P (but anytime version)
+        self.eta = 0.95 * np.sqrt(np.log(self.nA) / (self.i * self.nA))
+        self.gamma = 1.05 * np.sqrt(self.nA * np.log(self.nA) / self.i) 
+        self.w = np.ones((self.nA,self.nS),np.float64)
+        self.w_ny = np.ones((self.nA,self.nS),np.float64)
+
+        self.eneren = np.zeros(self.nS,np.float64)
+        self.mat_solve = np.ones((self.nS+1,self.nS),np.float64)
+        self.zero_one = np.zeros(self.nS+1, np.float64)
+        self.zero_one[self.nS] = 1.0
+        self.i = 0 # For zero indexing.
 
 
     def play(self, state, reward, tau):
@@ -653,19 +693,19 @@ class SMDP_EXP3:
             self.rhat = np.zeros((self.nS,self.nA),np.float64)
             self.tauhat = np.zeros((self.nS,self.nA),np.float64)
             # Update weighted estimates.
+            # Firstly a sanity check
             self.rhat[self.s,action] = reward /(self.current_sample_prop[action,self.s]*self.mu[self.s]) #use tau to avoid overflow
             self.tauhat[self.s,action] = tau /(self.current_sample_prop[action,self.s]*self.mu[self.s])
             # Compute current P^pi
             self.current_P = np.zeros((self.nS,self.nS),np.float64)
             for s in range(self.nS):
                 for sp in range(self.nS):
-                    self.current_P[s,sp]  = self.current_sample_prop[:,s] @ self.P[s,:,sp]
-            # Calculate stationary distribution heuristically via matrix power.
-            #self.mu_st = self.eneren @ np.linalg.matrix_power(self.current_P, 50) 
+                    self.current_P[s,sp]  = np.sum(self.current_sample_prop[:,s] * self.P[s,:,sp])
+            # Calculate stationary distribution heuristically via matrix power (assume consergence).
+            self.mu_st = self.eneren @ np.linalg.matrix_power(self.current_P, 50) 
             # By least squares solver
-            self.mat_solve[:self.nS,:] = np.identity(self.nS,np.float64)-self.current_P            
-            self.mu_st = np.linalg.lstsq(self.mat_solve,self.zero_one,rcond = 10**(-120))[0]
-
+            #self.mat_solve[:self.nS,:] = np.identity(self.nS,np.float64)-self.current_P            
+            #self.mu_st = np.linalg.lstsq(self.mat_solve,self.zero_one,rcond = 10**(-120))[0]
             
             # Find rho by importance sampled estimates. 
             self.rhohat = 0
@@ -676,21 +716,28 @@ class SMDP_EXP3:
             self.diff = np.zeros((self.nS,self.nA),np.float64)
             self.diff[self.s,action] = self.rhat[self.s,action] - self.rhohat * self.tauhat[self.s,action] 
 
-            for a in range(self.nA):
-                self.identity[:,a,:] = np.identity(self.nS)
-                self.inv[:,a,:] = self.identity[:,a,:] - self.P[:,a,:]
-                self.qhat[:,a] += np.linalg.lstsq(self.inv[:,a,:].T, self.diff[:,a],rcond = 10**(-120))[0] # increment
+
+            # Find value function: 
+            differ = np.identity(self.nS) - self.current_P
+            # compute temporary v
+            for s in range(self.nS):
+                self.V_temp[s] = np.sum(self.rhat[s,:] * self.current_sample_prop[:,s] - self.rhohat * self.tauhat[s,:] * self.current_sample_prop[:,s])
+            #Compute actual V
+            self.V = np.linalg.lstsq(differ, self.V_temp,rcond = 10**(-120))[0]
+            print(self.V)
+            # Find Qhat according to (5)
+            for s in range(self.nS):
+                for a in range(self.nA):
+                    self.qhat[s,a] += self.rhat[s,a] - self.rhohat*self.tauhat[s,a] + self.P[s,a,:] @ self.V # increment
             # The last step increments qhat. We then calculate relative diff (see footnote 6):
             # i.e. For nummerical stable.
             for s in range(self.nS):    
                 self.qhatdiff[s,:] = self.qhat[s,:] - np.max(self.qhat[s,:])*np.ones(self.nA,np.float64)
             
             # 7) Update w.
-            for s in range(self.nS): 
-                for a in range(self.nA):
-                    self.w_ny[a,s] = self.w[a,s] * np.exp(self.eta*( self.qhatdiff[s,a]))
-            self.w = self.w_ny
-
+            for a in range(self.nA):
+                self.w_ny[a,self.s] = (self.w[a,self.s]+10**(-10)) * np.exp(self.eta*( self.qhatdiff[self.s,a]))
+            self.w = self.w_ny  # small number added to not zero next time above. +10**(-10) 
         # Updates.
         self.i = self.i + 1
         self.eta = 0.95 * np.sqrt(np.log(self.nA) / (self.i * self.nA))

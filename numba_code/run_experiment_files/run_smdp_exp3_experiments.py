@@ -16,32 +16,64 @@ import matplotlib.pyplot as plt
 import gc
 import pandas as pd
 
-T = 10**5
+# ACTUAL RUNS
 
-#For experiments.
-# Test on SMDP-EXP3
-env = rs.riverswim(nS = 10, T_max = 10)
-_,_,_,gain = utils.VI(env)
-smdp_exp3 = ucrlS.SMDP_EXP3(nS = 10, nA = 2, N = 10, P = env.P_smdp)
+# RUN: 10 STATE RIVERSWIM WITH OPTIONS AND N=4) 
+T = 500
+N = 4
+N
 
-
-rew, tau = utils.run_experiment(env, smdp_exp3,T=T)
-
-regret = utils.calc_regret(rew,tau,gain)
-smdp_exp3.current_sample_prop
-# These are close, which should be a good sign (page 680). 
-smdp_exp3.mu_st
-smdp_exp3.mu
-
-smdp_exp3.tauhat
-smdp_exp3.rhat
-smdp_exp3.zero_one
-
-np.sum(smdp_exp3.mu)
-np.sum(smdp_exp3.mu_st)
+S = 10
+T_max_grid=[S-1,S,S+1]
+n_reps = 7
+for t in T_max_grid:
+    env = rs.riverswim(nS=S, T_max=t)
+    smdp_exp3 = ucrlS.SMDP_EXP3(nS = S, nA = 2, N = N, P = env.P_smdp)
+    utils.run_experiments_and_save([smdp_exp3], [env], T = T, n_reps=n_reps, subdir = "smdpexp3_rs", experiment_name=f"smpdexp3_ns_{S}_Tmax_{t}_N{N}.pkl")
 
 
 
-plt.plot(regret)
-plt.savefig('C:/Users/andre/OneDrive/KU, MAT-OEK/Bachelor matematik-oekonomi/3. aar/Bachelorprojekt/Out/test')
-plt.show()
+
+# RUN: 20 STATE RIVERSWIM WITH OPTIONS AND N=4)
+# Read other data first. 
+
+S = 20
+T_max_grid=[S-1,S,S+1]
+n_reps = 7
+for t in T_max_grid:
+    env = rs.riverswim(nS=S, T_max=t)
+    smdp_exp3 = ucrlS.SMDP_EXP3(nS = S, nA = 2, N = 8, P = env.P_smdp)
+    utils.run_experiments_and_save([smdp_exp3], [env], T = T, n_reps=n_reps, subdir = "smdpexp3_rs", experiment_name=f"smpdexp3_ns_{S}_Tmax_{t}_N{N}.pkl")
+    smdp_exp3.current_sample_prop
+
+
+# ACTUAL RUNS
+
+# RUN: 10 STATE RIVERSWIM WITH OPTIONS AND N=10) 
+T = 5*10**4
+N = 10
+
+
+S = 10
+T_max_grid=[S-1,S,S+1]
+n_reps = 7
+for t in T_max_grid:
+    env = rs.riverswim(nS=S, T_max=t)
+    smdp_exp3 = ucrlS.SMDP_EXP3(nS = S, nA = 2, N = N, P = env.P_smdp)
+    utils.run_experiments_and_save([smdp_exp3], [env], T = T, n_reps=n_reps, subdir = "smdpexp3_rs", experiment_name=f"smpdexp3_ns_{S}_Tmax_{t}_N{N}.pkl")
+
+
+
+# RUN: 20 STATE RIVERSWIM WITH OPTIONS AND N=10)
+# Read other data first. 
+
+S = 20
+T_max_grid=[S-1,S,S+1]
+n_reps = 7
+for t in T_max_grid:
+    env = rs.riverswim(nS=S, T_max=t)
+    smdp_exp3 = ucrlS.SMDP_EXP3(nS = S, nA = 2, N = 8, P = env.P_smdp)
+    utils.run_experiments_and_save([smdp_exp3], [env], T = T, n_reps=n_reps, subdir = "smdpexp3_rs", experiment_name=f"smpdexp3_ns_{S}_Tmax_{t}_N{N}.pkl")
+
+
+
