@@ -21,7 +21,6 @@ T = 5*10**7
 # Recall for grid world, it only makes sense to take T_max < d
 def scenario_generator(nS):
     nS_grid = np.ones(nS)*nS
-<<<<<<< HEAD
     T_grid = [x for x in range(2,9)]
     nS_grid = nS_grid.tolist()
     return list(map(int, nS_grid)), list(map(int,T_grid))
@@ -29,14 +28,6 @@ def scenario_generator(nS):
 n_reps = 10
 T = 10**7
 
-=======
-    T_grid = [x for x in range(2, 10, 2)]
-    nS_grid = nS_grid.tolist()
-    return list(map(int, nS_grid)), list(map(int,T_grid))
-
-
-
->>>>>>> 326dd3b8307724b72ddaad6568260b7d5c9deadf
 # UCRLSMDP
 
 S = 10*10

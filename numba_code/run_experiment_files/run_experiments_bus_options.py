@@ -24,10 +24,10 @@ def lambda_grid(T_bound):
 ### NS = 10, T_max = 10 - for comparisons to SMDP-EXP3.
 
 nS = 10
-T_max = 8
+T_max = 10
 Hs = [100] # Just consider H=100
 T_max_grid=lambda_grid(nS*T_max)
-n_reps = 7
+n_reps = 10
 for H in Hs:
     bus = surcl.bus3_wrapper(nS, nA=2, delta=0.05, H=H, imprv=1, T_max_grid=T_max_grid)
     env = rs.riverswim(nS=nS, T_max=T_max)
@@ -43,10 +43,10 @@ for H in Hs:
 ### NS = 20, T_max = 15 - for comparisons to SMDP-EXP3.
 
 nS = 20
-T_max = 14
+T_max = 20
 Hs = [100] # Just consider H=100
 T_max_grid=lambda_grid(nS*T_max)
-n_reps = 7
+n_reps = 10
 for H in Hs:
     bus = surcl.bus3_wrapper(nS, nA=2, delta=0.05, H=H, imprv=1, T_max_grid=T_max_grid)
     env = rs.riverswim(nS=nS, T_max=T_max)

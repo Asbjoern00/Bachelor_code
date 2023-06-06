@@ -165,7 +165,7 @@ def scenario_generator(nS):
     return list(map(int, nS_grid)), list(map(int,T_grid))
 
 
-n_reps = 7
+n_reps = 10
 T = 5*10**6
 
 

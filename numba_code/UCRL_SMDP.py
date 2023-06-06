@@ -493,7 +493,8 @@ def bus3_wrapper(nS, nA, delta,H,imprv, T_max_grid):
 
 
 
-    # The next algorithm is inspired by Neu et. al. (MDP-EXP3)
+
+# The next algorithm is inspired by Neu et. al. (MDP-EXP3)
 spec = [
 	('nS', int64),
 	('T_max', int64),
@@ -525,6 +526,7 @@ spec = [
     ('tauhat', float64[:,:]),
     ('qhat', float64[:,:]),
     ('qhatdiff', float64[:,:]),
+    ('qhat_hist',float64[:,:,:]),
     ('rhohat', float64),
     ('inv', float64[:,:,:]),
     ('P', float64[:,:,:]),
@@ -540,9 +542,7 @@ spec = [
     ("zero_one", float64[:]),
     ("V", float64[:]),
     ("V_temp", float64[:])
-
     ]
-
 @jitclass(spec = spec)
 class SMDP_EXP3:
     def __init__(self, nS, nA ,N,P):
@@ -557,6 +557,7 @@ class SMDP_EXP3:
         self.P = P
         self.current_P = np.zeros((self.nS,self.nS),np.float64)
         self.history_matrix = np.zeros((self.N-1,self.nS,self.nS),np.float64)
+        self.qhat_hist = np.zeros((self.N-1,self.nS,self.nA),np.float64)
         self.history_action = np.zeros(self.N-1,np.int64)
         self.history_state = np.zeros(self.N-1,np.int64)
         self.a_hist = 0
@@ -575,8 +576,8 @@ class SMDP_EXP3:
         self.inv = np.zeros((self.nS,self.nA,self.nS), np.float64)
 
         # Define Paramters as in EXP3.P (but anytime version)
-        self.eta = 0.95 * np.sqrt(np.log(self.nA) / (self.i * self.nA))
-        self.gamma = 1.05 * np.sqrt(self.nA * np.log(self.nA) / self.i) 
+        self.eta =  0.95 * np.sqrt(np.log(self.nA) / (self.i * self.nA))
+        self.gamma =  1.05 * np.sqrt(self.nA * np.log(self.nA) / self.i) 
         self.w = np.ones((self.nA,self.nS),np.float64)
         self.w_ny = np.ones((self.nA,self.nS),np.float64)
 
@@ -600,7 +601,7 @@ class SMDP_EXP3:
         return self.action
 
     def reset(self, s):
-        self.s = s # set initial state to first state. 
+        self.s = s 
         self.current_sample_prop = np.ones((self.nA,self.nS),np.float64)/self.nA
         self.i = 1 # for making formulas work.
         self.action_grid = np.arange(0,self.nA,dtype = np.int64)
@@ -609,6 +610,8 @@ class SMDP_EXP3:
         self.current_P = np.zeros((self.nS,self.nS),np.float64)
 
         self.history_matrix = np.zeros((self.N-1,self.nS,self.nS),np.float64)
+        self.qhat_hist = np.zeros((self.N-1,self.nS,self.nA),np.float64)
+
         self.history_action = np.zeros(self.N-1,np.int64)
         self.history_state = np.zeros(self.N-1,np.int64)
         self.a_hist = 0 # for transitioning
@@ -627,8 +630,8 @@ class SMDP_EXP3:
         self.inv = np.zeros((self.nS,self.nA,self.nS), np.float64)
 
         # Define Paramters as in EXP3.P (but anytime version)
-        self.eta = 0.95 * np.sqrt(np.log(self.nA) / (self.i * self.nA))
-        self.gamma = 1.05 * np.sqrt(self.nA * np.log(self.nA) / self.i) 
+        self.eta =  0.95 * np.sqrt(np.log(self.nA) / (self.i * self.nA))
+        self.gamma =  1.05 * np.sqrt(self.nA * np.log(self.nA) / self.i) 
         self.w = np.ones((self.nA,self.nS),np.float64)
         self.w_ny = np.ones((self.nA,self.nS),np.float64)
 
@@ -690,12 +693,11 @@ class SMDP_EXP3:
             self.history_state[self.N-2] = self.s
 
             # 6) Compute r hat and tau hat. Compute q hat. 
-            self.rhat = np.zeros((self.nS,self.nA),np.float64)
-            self.tauhat = np.zeros((self.nS,self.nA),np.float64)
             # Update weighted estimates.
-            # Firstly a sanity check
-            self.rhat[self.s,action] = reward /(self.current_sample_prop[action,self.s]*self.mu[self.s]) #use tau to avoid overflow
-            self.tauhat[self.s,action] = tau /(self.current_sample_prop[action,self.s]*self.mu[self.s])
+            self.rhat = np.zeros((self.nS,self.nA),np.float64)
+            self.rhat[self.s,action] = reward /(self.current_sample_prop[action,self.s]*self.mu[self.s]) 
+            self.tauhat = np.zeros((self.nS,self.nA),np.float64)
+            self.tauhat[self.s,action] = float64(tau) /(self.current_sample_prop[action,self.s]*self.mu[self.s]) 
             # Compute current P^pi
             self.current_P = np.zeros((self.nS,self.nS),np.float64)
             for s in range(self.nS):
@@ -703,51 +705,61 @@ class SMDP_EXP3:
                     self.current_P[s,sp]  = np.sum(self.current_sample_prop[:,s] * self.P[s,:,sp])
             # Calculate stationary distribution heuristically via matrix power (assume consergence).
             self.mu_st = self.eneren @ np.linalg.matrix_power(self.current_P, 50) 
-            # By least squares solver
-            #self.mat_solve[:self.nS,:] = np.identity(self.nS,np.float64)-self.current_P            
-            #self.mu_st = np.linalg.lstsq(self.mat_solve,self.zero_one,rcond = 10**(-120))[0]
             
             # Find rho by importance sampled estimates. 
-            self.rhohat = 0
-            for s in range(self.nS):
-                for a in range(self.nA):
-                    self.rhohat += self.mu_st[s] * self.current_sample_prop[a,s] * self.rhat[s,a]
-            # Calculate difference
-            self.diff = np.zeros((self.nS,self.nA),np.float64)
-            self.diff[self.s,action] = self.rhat[self.s,action] - self.rhohat * self.tauhat[self.s,action] 
-
-
+            self.rhohat = self.mu_st[self.s] * self.current_sample_prop[action,self.s] * self.rhat[self.s,action] / self.tauhat[self.s,action]
             # Find value function: 
-            differ = np.identity(self.nS) - self.current_P
+            differ = np.identity(self.nS) - self.current_P 
             # compute temporary v
             for s in range(self.nS):
-                self.V_temp[s] = np.sum(self.rhat[s,:] * self.current_sample_prop[:,s] - self.rhohat * self.tauhat[s,:] * self.current_sample_prop[:,s])
-            #Compute actual V
-            self.V = np.linalg.lstsq(differ, self.V_temp,rcond = 10**(-120))[0]
-            print(self.V)
-            # Find Qhat according to (5)
-            for s in range(self.nS):
-                for a in range(self.nA):
-                    self.qhat[s,a] += self.rhat[s,a] - self.rhohat*self.tauhat[s,a] + self.P[s,a,:] @ self.V # increment
-            # The last step increments qhat. We then calculate relative diff (see footnote 6):
-            # i.e. For nummerical stable.
-            for s in range(self.nS):    
-                self.qhatdiff[s,:] = self.qhat[s,:] - np.max(self.qhat[s,:])*np.ones(self.nA,np.float64)
-            
-            # 7) Update w.
-            for a in range(self.nA):
-                self.w_ny[a,self.s] = (self.w[a,self.s]+10**(-10)) * np.exp(self.eta*( self.qhatdiff[self.s,a]))
-            self.w = self.w_ny  # small number added to not zero next time above. +10**(-10) 
-        # Updates.
-        self.i = self.i + 1
-        self.eta = 0.95 * np.sqrt(np.log(self.nA) / (self.i * self.nA))
-        self.gamma = 1.05 * np.sqrt(self.nA * np.log(self.nA) / self.i) 
+                self.V_temp[s] = np.sum(self.rhat[s,:] * self.current_sample_prop[:,s]-self.rhohat*self.tauhat[s,:]*self.current_sample_prop[:,s] ) 
 
+            #Compute actual V
+            self.V = np.linalg.lstsq(differ, self.V_temp,rcond = 10**(-240))[0]
+
+            self.V = self.V - np.max(self.V)*np.ones(self.nS) # subtract smalles value to avoid overflow - in line with Q later.
+
+            # 7) Update w.
+            # For states before Q is active
+            if self.i < 2*(self.N - 1):
+                # Find Qhat according to (5) - Find later - Do this to get proper lack.
+                for s in range(self.nS):
+                    for a in range(self.nA):
+                        self.qhat[s,a] += self.rhat[s,a] - self.rhohat*self.tauhat[s,a] + self.P[s,a,:] @ self.V # increment
+
+                # The last step increments qhat. We then calculate relative diff (see footnote 6):
+                for s in range(self.nS):    
+                    self.qhatdiff[s,:] = self.qhat[s,:] - np.max(self.qhat[s,:])*np.ones(self.nA,np.float64)
+                # Compute matrix of q histories.
+                self.qhat_hist[self.i-(self.N - 1),:,:] = self.qhatdiff
+            # For states before Q is active
+            else:
+                for a in range(self.nA):
+                    self.w_ny[a,:] = (self.w[a,:]+10**(-10)) * np.exp(self.eta*(self.qhat_hist[0,:,a]))
+                
+                # Find Qhat according to (5) - Find later - Do this to get proper lack.
+                for s in range(self.nS):
+                    for a in range(self.nA):
+                        self.qhat[s,a] += self.rhat[s,a] - self.rhohat*self.tauhat[s,a]  + self.P[s,a,:] @ self.V # increment
+
+                # The last step increments qhat. We then calculate relative diff (see footnote 6):
+                for s in range(self.nS):    
+                    self.qhatdiff[s,:] = self.qhat[s,:] - np.max(self.qhat[s,:])*np.ones(self.nA,np.float64)
+                # Update Q-function.
+                for i in range(0,self.N-2):   
+                    self.qhat_hist[i,:,:] = self.qhat_hist[i+1,:,:]
+                self.qhat_hist[self.N-2,:,:] = self.qhatdiff
+                self.w = self.w_ny  # small number added to not zero next time above. +10**(-10) 
+
+        # Updates for next iteration.
+        self.i = self.i + 1
+        self.eta =  0.95 * np.sqrt(np.log(self.nA) / (self.i * self.nA))
+        self.gamma = 1.05 * np.sqrt(self.nA * np.log(self.nA) / self.i)
 
         policy = np.array(self.nS, np.int64) 
         self.sample_prob()
-
         return action, policy
         
     def _rand_choice_nb(self, arr, prob):
         return arr[np.searchsorted(np.cumsum(prob), np.random.random(), side="right")]
+
